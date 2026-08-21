@@ -228,10 +228,11 @@ describe("profile reasoning helpers", () => {
       expect(next.clearedAgents).toEqual([]);
     });
 
-    it("clears stale reasoning effort for scoped primary agents when profile configs are absent", () => {
+    it("clears stale reasoning effort for scoped primary agents and fallbacks when profile configs are absent", () => {
       const next = applyProfileReasoningEffort({
         agent: {
-          "sdd-init": { model: "openai/gpt-5", reasoningEffort: "high", options: { reasoningEffort: "high" } },
+          "sdd-init": { model: "openai/gpt-5", reasoningEffort: "high", reasoning_effort: "high", options: { reasoningEffort: "high", reasoning_effort: "high", thinking: { type: "enabled" } } },
+          "sdd-init-fallback": { model: "openai/gpt-5", reasoningEffort: "high", reasoning_effort: "high", options: { reasoningEffort: "high", reasoning_effort: "high" } },
           "sdd-apply": { model: "openai/gpt-5", reasoningEffort: "low", options: { reasoningEffort: "low" } },
           "sdd-plan": { model: "openai/gpt-5", reasoningEffort: "medium" },
         },
@@ -243,12 +244,17 @@ describe("profile reasoning helpers", () => {
       } as any, providers as any);
 
       expect(next.config.agent["sdd-init"].reasoningEffort).toBeUndefined();
+      expect(next.config.agent["sdd-init"].reasoning_effort).toBeUndefined();
       expect(next.config.agent["sdd-init"].options.reasoningEffort).toBeUndefined();
+      expect(next.config.agent["sdd-init"].options.reasoning_effort).toBeUndefined();
+      expect(next.config.agent["sdd-init"].options.thinking).toBeUndefined();
+      expect(next.config.agent["sdd-init-fallback"].reasoningEffort).toBeUndefined();
+      expect(next.config.agent["sdd-init-fallback"].reasoning_effort).toBeUndefined();
       expect(next.config.agent["sdd-apply"].reasoningEffort).toBeUndefined();
       expect(next.config.agent["sdd-apply"].options.reasoningEffort).toBeUndefined();
       expect(next.config.agent["sdd-plan"].reasoningEffort).toBe("medium");
       expect(next.appliedAgents).toEqual([]);
-      expect(next.clearedAgents.sort()).toEqual(["sdd-apply", "sdd-init"]);
+      expect(next.clearedAgents.sort()).toEqual(["sdd-apply", "sdd-init", "sdd-init-fallback"]);
       expect(next.warnings).toEqual([]);
     });
 

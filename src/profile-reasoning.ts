@@ -114,8 +114,11 @@ export function updateProfileReasoningEffort(profile: ProfileData, agentName: st
 function clearAgentReasoningEffort(agentConfig: any) {
   if (!agentConfig || typeof agentConfig !== "object") return;
   delete agentConfig.reasoningEffort;
+  delete agentConfig.reasoning_effort;
   if (agentConfig.options && typeof agentConfig.options === "object") {
     delete agentConfig.options.reasoningEffort;
+    delete agentConfig.options.reasoning_effort;
+    delete agentConfig.options.thinking;
   }
 }
 
@@ -161,6 +164,11 @@ export function applyProfileReasoningEffort(currentConfig: any, profile: Profile
     if (nextConfig?.agent?.[agentName] && typeof nextConfig.agent[agentName] === "object") {
       clearAgentReasoningEffort(nextConfig.agent[agentName]);
       clearedAgents.push(agentName);
+    }
+    const fallbackName = `${agentName}-fallback`;
+    if (nextConfig?.agent?.[fallbackName] && typeof nextConfig.agent[fallbackName] === "object") {
+      clearAgentReasoningEffort(nextConfig.agent[fallbackName]);
+      clearedAgents.push(fallbackName);
     }
   }
 
