@@ -12,7 +12,10 @@ import { randomBytes } from "node:crypto";
 import { createLogger } from "./logger";
 import {
   applyProfileReasoningEffort,
+  getReasoningEffortOptions,
+  pruneProfileReasoningEffort,
   normalizeProfileConfigs,
+  resolveReasoningEffortSelection,
   updateProfileReasoningEffort,
 } from "./profile-reasoning";
 
@@ -27,20 +30,32 @@ import {
   PROFILE_VERSION_SOURCE,
   ProfilePhaseModelField,
   BulkProfilePhaseAssignmentResult,
+  BulkProfileOverwriteResult,
+  ConfigurableProfileTarget,
   ProfileData,
+  ProfileConfigs,
   ProfileFallbackModels,
   ProfileModels,
   ProfileVersion,
   ProfileVersionMetadata,
   ProfileVersionOperation,
+  ModelMutationContext,
+  ProfileWriteTransaction,
+  ProfileWriteOptions,
+  PendingModelSelection,
+  StagedModelSelection,
   UpdateProfilePhaseModelResult,
 } from "./types";
 import {
   isManagedSddAgent,
   isFallbackEligibleSddAgent,
+  isEditablePrimaryAgent,
   isPrimarySddAgent,
   isSddFallbackAgent,
+  isRuntimeSyncEligibleAgent,
+  isCatalogVisibleAgent,
 } from "./utils";
+import { FALLBACK_SYNC_BASE_ORDER, deriveFallbackProfileKey, isValidAgentKey } from "./catalog";
 import { resolvePaths, ensureProfilesDir } from "./config";
 import {
   canonicalizeProfileModels,
@@ -182,6 +197,26 @@ export function extractSddAgentModels(config: any): ProfileModels {
 /**
  * Extracts managed fallback model mapping from a profile payload
  */
+/**
+ * Extracts models for all valid agent keys from a configuration object (persisted layer)
+ */
+export function extractPersistedAgentModels(config: any): ProfileModels {
+  const agents = config?.agent || {};
+  return Object.fromEntries(
+    Object.entries(agents)
+      .filter(
+        ([name, value]: any) =>
+          isValidAgentKey(name) &&
+          typeof value?.model === "string" &&
+          value.model.trim()
+      )
+      .map(([name, value]: any) => [name, value.model.trim()])
+  );
+}
+
+/**
+ * Extracts managed fallback model mapping from a profile payload
+ */
 export function extractSddFallbackModels(raw: any): ProfileFallbackModels {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
 
@@ -191,7 +226,7 @@ export function extractSddFallbackModels(raw: any): ProfileFallbackModels {
 
   return Object.fromEntries(
     Object.entries(source).filter(
-      ([name, value]: any) => isFallbackEligibleSddAgent(name) && typeof value === "string" && value.trim()
+      ([name, value]: any) => isValidAgentKey(name) && typeof value === "string" && value.trim()
     ).map(([name, value]: any) => [name, value.trim()])
   );
 }
@@ -201,34 +236,47 @@ function normalizeProfileModels(models: unknown, policy?: OrchestratorPolicy): P
 
   const normalized = Object.fromEntries(
     Object.entries(models)
-      .filter(([name, value]: any) => isPrimarySddAgent(name) && typeof value === "string" && value.trim())
+      .filter(([name, value]: any) => isValidAgentKey(name) && typeof value === "string" && value.trim())
       .map(([name, value]: any) => [name, value.trim()])
   );
   return policy ? canonicalizeProfileModels(normalized, policy) : normalized;
 }
 
-function extractPersistedProfileExtras(raw: unknown): Record<string, unknown> {
+export function extractPersistedProfileExtras(raw: unknown): Record<string, unknown> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
 
   return Object.fromEntries(
-    Object.entries(raw).filter(([key]) => {
-      if (key === "models" || key === "fallback" || key === "configs" || key === "agent") return false;
-      if (isPrimarySddAgent(key) || isSddFallbackAgent(key)) return false;
-      return true;
-    })
+    Object.entries(raw).filter(
+      ([key]) => key !== "models" && key !== "fallback" && key !== "configs" && key !== "agent" && !isPrimarySddAgent(key)
+    )
   );
 }
 
-function normalizePersistedProfileData(profile: ProfileData, policy?: OrchestratorPolicy): ProfileData {
+function normalizePersistedProfileData(
+  profile: ProfileData,
+  policy?: OrchestratorPolicy,
+  options?: ProfileWriteOptions,
+): ProfileData {
   const models = normalizeProfileModels(profile?.models, policy);
   const fallback = extractSddFallbackModels({ fallback: profile?.fallback || {} });
-  const configs = normalizeProfileConfigs(profile?.configs, policy);
+  const configs = normalizeProfileConfigs(
+    profile?.configs,
+    policy,
+    options?.preserveProviderDefaultReasoning,
+    fallback,
+  );
+  const persistedConfigs = configs
+    ? Object.fromEntries(Object.entries(configs).filter(([name]) => {
+      const fallbackOwner = deriveFallbackProfileKey(name);
+      return fallbackOwner ? Object.hasOwn(fallback, fallbackOwner) : Object.hasOwn(models, name);
+    }))
+    : undefined;
 
   return {
     ...extractPersistedProfileExtras(profile),
     models,
     ...(Object.keys(fallback).length > 0 ? { fallback } : {}),
-    ...(configs ? { configs } : {}),
+    ...(persistedConfigs && Object.keys(persistedConfigs).length > 0 ? { configs: persistedConfigs } : {}),
   };
 }
 
@@ -257,8 +305,8 @@ export function readProfileModels(profilePath: string): ProfileModels {
   if (raw && typeof raw === "object" && !Array.isArray(raw) && raw.models && typeof raw.models === "object") {
     return canonicalizeProfileModels(Object.fromEntries(
       Object.entries(raw.models)
-        .filter(([name, value]: any) => isPrimarySddAgent(name) && typeof value === "string" && value.trim())
-        .map(([name, value]: any) => [name, value])
+        .filter(([name, value]: any) => isValidAgentKey(name) && typeof value === "string" && value.trim())
+        .map(([name, value]: any) => [name, value.trim()])
     ), policy);
   }
 
@@ -268,15 +316,15 @@ export function readProfileModels(profilePath: string): ProfileModels {
       Object.entries(raw)
         .filter(
           ([name, value]: any) =>
-            isPrimarySddAgent(name) &&
-            ((typeof value === "string" && value) || (typeof value?.model === "string" && value.model))
+            isValidAgentKey(name) &&
+            ((typeof value === "string" && value.trim()) || (typeof value?.model === "string" && value.model.trim()))
         )
-        .map(([name, value]: any) => [name, typeof value === "string" ? value : value.model])
+        .map(([name, value]: any) => [name, typeof value === "string" ? value.trim() : value.model.trim()])
     ), policy);
   }
 
   // Config format: { agent: { ... } }
-  return canonicalizeProfileModels(extractSddAgentModels(raw), policy);
+  return canonicalizeProfileModels(extractPersistedAgentModels(raw), policy);
 }
 
 /**
@@ -323,44 +371,68 @@ function readProfileDataFromRaw(rawContent: string): ProfileData {
   }
 
   let models: ProfileModels;
+  let isLegacyFlat = false;
   if (raw && typeof raw === "object" && !Array.isArray(raw) && raw.models && typeof raw.models === "object") {
     models = Object.fromEntries(
       Object.entries(raw.models)
-        .filter(([name, value]: any) => isPrimarySddAgent(name) && typeof value === "string" && value.trim())
-        .map(([name, value]: any) => [name, value])
+        .filter(([name, value]: any) => isValidAgentKey(name) && typeof value === "string" && value.trim())
+        .map(([name, value]: any) => [name, value.trim()])
     );
   } else if (raw && typeof raw === "object" && !Array.isArray(raw) && !raw.agent && !raw.models) {
+    isLegacyFlat = true;
     models = Object.fromEntries(
       Object.entries(raw)
         .filter(
           ([name, value]: any) =>
-            isPrimarySddAgent(name) &&
-            ((typeof value === "string" && value) || (typeof value?.model === "string" && value.model))
+            isValidAgentKey(name) &&
+            ((typeof value === "string" && value.trim()) || (typeof value?.model === "string" && value.model.trim()))
         )
-        .map(([name, value]: any) => [name, typeof value === "string" ? value : value.model])
+        .map(([name, value]: any) => [name, typeof value === "string" ? value.trim() : value.model.trim()])
     );
   } else {
-    models = extractSddAgentModels(raw);
+    models = extractPersistedAgentModels(raw);
   }
 
   const fallback = extractSddFallbackModels(raw);
   const policy = getOrchestratorPolicy(Object.keys(raw?.agent || raw?.models || raw || {}));
   const configs = normalizeProfileConfigs(raw?.configs, policy);
+  const canonicalModels = canonicalizeProfileModels(models, policy);
+  const persistedConfigs = configs
+    ? Object.fromEntries(Object.entries(configs).filter(([name]) => Object.hasOwn(canonicalModels, name)))
+    : undefined;
+  const rawExtras = extractPersistedProfileExtras(raw);
+  const extras = isLegacyFlat
+    ? Object.fromEntries(Object.entries(rawExtras).filter(([key]) => !(key in models)))
+    : rawExtras;
+
   return {
-    ...extractPersistedProfileExtras(raw),
-    models: canonicalizeProfileModels(models, policy),
+    ...extras,
+    models: canonicalModels,
     ...(Object.keys(fallback).length > 0
       ? { fallback }
       : {}),
-    ...(configs ? { configs } : {}),
+    ...(persistedConfigs && Object.keys(persistedConfigs).length > 0 ? { configs: persistedConfigs } : {}),
   };
 }
 
 /**
  * Persists full profile data while preserving the existing profile payload shape.
  */
-export function writeProfileData(profilePath: string, profile: ProfileData, policy?: OrchestratorPolicy): void {
-  atomicWriteFile(profilePath, JSON.stringify(normalizePersistedProfileData(profile, policy), null, 2));
+export function writeProfileData(
+  profilePath: string,
+  profile: ProfileData,
+  policy?: OrchestratorPolicy,
+  options?: ProfileWriteOptions,
+): void {
+  const normalized = normalizePersistedProfileData(profile, policy, options);
+  if (normalized.configs) {
+    const configs = Object.fromEntries(
+      Object.entries(normalized.configs).filter(([name]) => isValidAgentKey(name) && (isEditablePrimaryAgent(name) || name === policy?.canonicalName)),
+    );
+    if (Object.keys(configs).length > 0) normalized.configs = configs;
+    else delete normalized.configs;
+  }
+  atomicWriteFile(profilePath, JSON.stringify(normalized, null, 2));
 }
 
 function normalizePrimarySddAgentNames(primarySddAgentNames: string[]): string[] {
@@ -661,9 +733,9 @@ function readProfilePreviewFromRaw(beforeRaw: string): { models: ProfileModels; 
       models: isRecord(raw)
         ? isRecord(raw.models)
           ? Object.fromEntries(
-              Object.entries(sanitizeStringRecord(raw.models) || {}).filter(([name]) => isPrimarySddAgent(name))
+              Object.entries(sanitizeStringRecord(raw.models) || {}).filter(([name]) => isValidAgentKey(name))
             )
-          : extractSddAgentModels(raw)
+          : extractPersistedAgentModels(raw)
         : {},
       fallback: extractSddFallbackModels(raw),
     };
@@ -749,6 +821,201 @@ function pruneProfileVersions(profileFile: string, retention: number): void {
   for (const staleFile of files.slice(retention)) {
     fs.unlinkSync(path.join(versionDir, staleFile));
   }
+}
+
+function removeCreatedProfileVersion(version?: ProfileVersion): void {
+  if (!version) return;
+  try {
+    fs.unlinkSync(resolveProfileVersionPath(version.id));
+  } catch (error) {
+    log.warn(`removeCreatedProfileVersion: failed to remove ${version.id}`, error);
+  }
+}
+
+function resolveModelMutationContext(
+  context: ModelMutationContext | undefined,
+  fallbackPolicy: ModelMutationContext["effortPolicy"],
+): ModelMutationContext {
+  return context || { providers: [], effortPolicy: fallbackPolicy };
+}
+
+function preparePrimaryModelMutation(
+  profile: ProfileData,
+  agentName: string,
+  modelId: string,
+  policy: OrchestratorPolicy,
+): { profile: ProfileData; agentName: string } {
+  if (!policy.aliasNames.includes(agentName as any)) {
+    return {
+      profile: {
+        ...profile,
+        models: { ...(profile.models || {}), [agentName]: modelId },
+      },
+      agentName,
+    };
+  }
+
+  const models = { ...(profile.models || {}) };
+  const configs = { ...(profile.configs || {}) };
+  for (const aliasName of policy.aliasNames) {
+    delete models[aliasName];
+    delete configs[aliasName];
+  }
+  models[policy.canonicalName] = modelId;
+  const { configs: _discardedConfigs, ...profileWithoutConfigs } = profile;
+
+  return {
+    profile: {
+      ...profileWithoutConfigs,
+      models,
+      ...(Object.keys(configs).length > 0 ? { configs } : {}),
+    },
+    agentName: policy.canonicalName,
+  };
+}
+
+function applyModelReasoningMutation(
+  profile: ProfileData,
+  agentName: string,
+  modelId: string,
+  context: ModelMutationContext,
+  runtimePolicy?: OrchestratorPolicy,
+): ProfileData {
+  if (context.effortPolicy === "interactive-clear") {
+    return updateProfileReasoningEffort(profile, agentName, "");
+  }
+
+  if (context.effortPolicy === "bulk-compatible-prune") {
+    return pruneProfileReasoningEffort(profile, agentName, modelId, context.providers as any[], runtimePolicy);
+  }
+
+  return profile;
+}
+
+function persistVersionedProfileMutation(
+  profilePath: string,
+  profile: ProfileData,
+  version: ProfileVersion,
+  policy?: OrchestratorPolicy,
+  options?: ProfileWriteOptions,
+): void {
+  try {
+    writeProfileData(profilePath, profile, policy, options);
+  } catch (error) {
+    removeCreatedProfileVersion(version);
+    atomicWriteFile(profilePath, version.beforeRaw);
+    throw error;
+  }
+}
+
+
+function deduplicateBulkProfileTargets(targets: readonly ConfigurableProfileTarget[]): ConfigurableProfileTarget[] {
+  const seen = new Set<string>();
+  return targets.filter((target) => {
+    if ((target.field !== "model" && target.field !== "fallback") || !isValidAgentKey(target.profileKey)) return false;
+    if (target.field === "fallback" && !isFallbackEligibleSddAgent(target.profileKey)) return false;
+    const key = `${target.field}:${target.profileKey}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function resolveBulkReasoningEffort(
+  context: ModelMutationContext,
+  modelId: string,
+  selection: string,
+): string {
+  if (getReasoningEffortOptions(context.providers as any[], modelId).length === 0) {
+    return "provider-default";
+  }
+  const resolved = resolveReasoningEffortSelection(context.providers as any[], modelId, selection);
+  return resolved.kind === "provider-default" ? "provider-default" : resolved.value;
+}
+
+/** Builds the complete next profile without I/O for a runtime-derived bulk request. */
+export function buildBulkProfileOverwrite(
+  profile: ProfileData,
+  targets: readonly ConfigurableProfileTarget[],
+  modelId: string,
+  effortSelection: string,
+  context: ModelMutationContext,
+  runtimePolicy?: OrchestratorPolicy,
+  target: "primary" | "fallback" = BULK_ASSIGNMENT_TARGET.PRIMARY,
+): BulkProfileOverwriteResult {
+  const trimmedModelId = modelId?.trim();
+  if (!trimmedModelId) throw new Error("modelId must be a non-empty string");
+
+  const uniqueTargets = deduplicateBulkProfileTargets(targets);
+  const policy = runtimePolicy ?? getOrchestratorPolicy(Object.keys(profile?.models || {}));
+  const reasoningEffort = resolveBulkReasoningEffort(context, trimmedModelId, effortSelection);
+  const nextModels = { ...(profile?.models || {}) };
+  const nextFallback = { ...(profile?.fallback || {}) };
+  const nextConfigs = { ...(profile?.configs || {}) };
+  let modelsAssigned = 0;
+  let effortsAssigned = 0;
+
+  for (const profileTarget of uniqueTargets) {
+    if ((target === BULK_ASSIGNMENT_TARGET.FALLBACK) !== (profileTarget.field === "fallback")) continue;
+    const targetName = policy.aliasNames.includes(profileTarget.profileKey as any)
+      ? policy.canonicalName
+      : profileTarget.profileKey;
+    if (target === BULK_ASSIGNMENT_TARGET.PRIMARY && policy.aliasNames.includes(profileTarget.profileKey as any)) {
+      for (const aliasName of policy.aliasNames) {
+        delete nextModels[aliasName];
+        delete nextConfigs[aliasName];
+      }
+    }
+    const modelMap = target === BULK_ASSIGNMENT_TARGET.FALLBACK ? nextFallback : nextModels;
+    const configKey = target === BULK_ASSIGNMENT_TARGET.FALLBACK ? `${targetName}-fallback` : targetName;
+    if (modelMap[targetName] !== trimmedModelId) modelsAssigned += 1;
+    const currentEffort = nextConfigs[configKey]?.reasoningEffort;
+    if (currentEffort !== reasoningEffort) effortsAssigned += 1;
+    modelMap[targetName] = trimmedModelId;
+    nextConfigs[configKey] = { ...(nextConfigs[configKey] || {}), reasoningEffort };
+  }
+
+  const { configs: _ignoredConfigs, ...profileWithoutConfigs } = profile || { models: {} };
+  return {
+    profile: {
+      ...profileWithoutConfigs,
+      models: nextModels,
+      ...(Object.keys(nextFallback).length > 0 ? { fallback: nextFallback } : {}),
+      ...(Object.keys(nextConfigs).length > 0 ? { configs: nextConfigs } : {}),
+    },
+    modelsAssigned,
+    effortsAssigned,
+    changed: modelsAssigned > 0 || effortsAssigned > 0,
+  };
+}
+
+/** Persists one snapshot-backed profile-wide overwrite after its pure build succeeds. */
+export function updateProfileWithBulkOverwrite(
+  profilePath: string,
+  targets: readonly ConfigurableProfileTarget[],
+  modelId: string,
+  effortSelection: string,
+  context: ModelMutationContext,
+  runtimePolicy?: OrchestratorPolicy,
+  target: "primary" | "fallback" = BULK_ASSIGNMENT_TARGET.PRIMARY,
+): { assignment: BulkProfileOverwriteResult; version?: ProfileVersion } {
+  const beforeRaw = fs.readFileSync(profilePath, "utf-8").toString();
+  const profileData = readProfileDataFromRaw(beforeRaw);
+  const policy = runtimePolicy ?? getOrchestratorPolicy(Object.keys(profileData.models || {}));
+  const assignment = buildBulkProfileOverwrite(profileData, targets, modelId, effortSelection, context, policy, target);
+  if (!assignment.changed) return { assignment };
+
+  const version = createProfileVersion(
+    profilePath,
+    normalizeBulkVersionOperation({ target, mode: BULK_ASSIGNMENT_MODE.OVERWRITE }, assignment.modelsAssigned),
+    `Override ${assignment.modelsAssigned} configurable ${target} agents`,
+    DEFAULT_PROFILE_VERSION_RETENTION,
+    beforeRaw,
+  );
+  persistVersionedProfileMutation(profilePath, assignment.profile, version, policy, {
+    preserveProviderDefaultReasoning: true,
+  });
+  return { assignment, version };
 }
 
 export function createProfileVersion(
@@ -869,12 +1136,24 @@ export function updateProfileWithBulkPhaseAssignment(
   primarySddAgentNames: string[],
   modelId: string,
   operation: BulkAssignmentOperation,
-  runtimePolicy?: OrchestratorPolicy
+  runtimePolicy?: OrchestratorPolicy,
+  context?: ModelMutationContext,
 ): { assignment: BulkProfilePhaseAssignmentResult; version?: ProfileVersion } {
   const beforeRaw = fs.readFileSync(profilePath, "utf-8").toString();
   const profileData = readProfileDataFromRaw(beforeRaw);
   const assignment = applyBulkProfilePhaseAssignment(profileData, primarySddAgentNames, modelId, operation);
   if (!assignment.changed) return { assignment };
+
+  const bulkReasoning = operation.target === BULK_ASSIGNMENT_TARGET.PRIMARY || operation.target === BULK_ASSIGNMENT_TARGET.BOTH;
+  if (bulkReasoning && context?.effortPolicy === "bulk-compatible-prune" && assignment.profile.configs) {
+    let nextProfile = assignment.profile;
+    for (const agentName of normalizePrimarySddAgentNames(primarySddAgentNames)) {
+      const currentModel = nextProfile.models?.[agentName];
+      if (!currentModel) continue;
+      nextProfile = pruneProfileReasoningEffort(nextProfile, agentName, currentModel, context.providers as any[], runtimePolicy);
+    }
+    assignment.profile = nextProfile;
+  }
 
   const version = createProfileVersion(
     profilePath,
@@ -884,7 +1163,7 @@ export function updateProfileWithBulkPhaseAssignment(
     beforeRaw
   );
   const policy = runtimePolicy ?? getOrchestratorPolicy(primarySddAgentNames);
-  writeProfileData(profilePath, assignment.profile, policy);
+  persistVersionedProfileMutation(profilePath, assignment.profile, version, policy);
   return { assignment, version };
 }
 
@@ -893,25 +1172,30 @@ export function updateProfilePhaseModel(
   agentName: string,
   field: ProfilePhaseModelField,
   modelId: string,
-  runtimePolicy?: OrchestratorPolicy
-): UpdateProfilePhaseModelResult {
+  runtimePolicy?: OrchestratorPolicy,
+  context?: ModelMutationContext,
+): UpdateProfilePhaseModelResult & Partial<ProfileWriteTransaction> {
   const trimmedModelId = modelId?.trim();
   if (!trimmedModelId) {
     throw new Error("modelId must be a non-empty string");
   }
-  if (!isPrimarySddAgent(agentName) || isSddFallbackAgent(agentName)) {
+  if (field === PROFILE_PHASE_MODEL_FIELD.PRIMARY && !isEditablePrimaryAgent(agentName)) {
+    throw new Error("agentName must be an editable primary agent");
+  }
+  if (field === PROFILE_PHASE_MODEL_FIELD.FALLBACK && (!isPrimarySddAgent(agentName) || isSddFallbackAgent(agentName))) {
     throw new Error("agentName must be a primary SDD agent");
   }
-  if (field === PROFILE_PHASE_MODEL_FIELD.FALLBACK && !isFallbackEligibleSddAgent(agentName)) {
+  if (field === PROFILE_PHASE_MODEL_FIELD.FALLBACK && deriveFallbackProfileKey(`${agentName}-fallback`) === null) {
     throw new Error("agentName is not eligible for fallback models");
   }
 
   const profileData = readProfileData(profilePath);
+  const policy = runtimePolicy ?? getOrchestratorPolicy(Object.keys(profileData.models || {}));
   const currentValue = field === PROFILE_PHASE_MODEL_FIELD.FALLBACK
     ? profileData.fallback?.[agentName]
     : profileData.models?.[agentName];
   if (currentValue === trimmedModelId) {
-    return { profile: profileData, changed: false };
+    return { profile: profileData, changed: false, context: context || { providers: [], effortPolicy: "none" } };
   }
 
   const nextProfile: ProfileData = {
@@ -920,15 +1204,18 @@ export function updateProfilePhaseModel(
     fallback: { ...(profileData.fallback || {}) },
   };
 
+  const mutationContext = resolveModelMutationContext(
+    context,
+    field === PROFILE_PHASE_MODEL_FIELD.FALLBACK ? "none" : "interactive-clear",
+  );
+
   if (field === PROFILE_PHASE_MODEL_FIELD.FALLBACK) {
     nextProfile.fallback = { ...(nextProfile.fallback || {}), [agentName]: trimmedModelId };
   } else {
-    nextProfile.models = { ...(nextProfile.models || {}), [agentName]: trimmedModelId };
-    if (profileData?.configs?.[agentName]?.reasoningEffort) {
-      const previousReasoningEffort = profileData.configs[agentName].reasoningEffort;
-      const updatedReasoning = updateProfileReasoningEffort(nextProfile, agentName, previousReasoningEffort);
-      nextProfile.configs = updatedReasoning.configs;
-    }
+    const mutation = preparePrimaryModelMutation(nextProfile, agentName, trimmedModelId, policy);
+    const reasonedProfile = applyModelReasoningMutation(mutation.profile, mutation.agentName, trimmedModelId, mutationContext, policy);
+    delete nextProfile.configs;
+    Object.assign(nextProfile, reasonedProfile);
   }
 
   const operation: PhaseProfileVersionOperation = {
@@ -939,9 +1226,129 @@ export function updateProfilePhaseModel(
     changedPhases: 1,
   };
   const version = createProfileVersion(profilePath, operation, buildPhaseOperationSummary(agentName, field, trimmedModelId));
+  persistVersionedProfileMutation(profilePath, nextProfile, version, policy);
+  return {
+    profile: nextProfile,
+    changed: true,
+    version,
+    versionId: version.id,
+    context: mutationContext,
+  };
+}
+
+export function updateProfileReasoningWithoutVersion(
+  profilePath: string,
+  agentName: string,
+  value?: string,
+  runtimePolicy?: OrchestratorPolicy,
+): ProfileData {
+  const profile = readProfileData(profilePath);
+  const nextProfile = updateProfileReasoningEffort(profile, agentName, value);
+  writeProfileData(profilePath, nextProfile, runtimePolicy);
+  return nextProfile;
+}
+
+export function stageProfileModelSelection(
+  profile: ProfileData,
+  agentName: string,
+  field: ProfilePhaseModelField,
+  modelId: string,
+): StagedModelSelection {
+  const trimmedModelId = modelId?.trim();
+  if (!trimmedModelId) throw new Error("modelId must be a non-empty string");
+  const pending: PendingModelSelection = { agentName, field, modelId: trimmedModelId };
+  const currentModel = field === PROFILE_PHASE_MODEL_FIELD.FALLBACK
+    ? profile.fallback?.[agentName]
+    : profile.models?.[agentName];
+  return {
+    pending,
+    modelChanged: currentModel !== trimmedModelId,
+    requestReasoningEffort: field === PROFILE_PHASE_MODEL_FIELD.PRIMARY,
+  };
+}
+
+export function commitPendingModelSelection(
+  profilePath: string,
+  pending: PendingModelSelection,
+  effortSelection?: string,
+  runtimePolicy?: OrchestratorPolicy,
+  context?: ModelMutationContext,
+): ProfileWriteTransaction {
+  if (pending.field === PROFILE_PHASE_MODEL_FIELD.PRIMARY && effortSelection === undefined) {
+    const profile = readProfileData(profilePath);
+    return { profile, changed: false, context: context || { providers: [], effortPolicy: "none" } };
+  }
+
+  const beforeRaw = fs.readFileSync(profilePath, "utf-8").toString();
+  const profileData = readProfileDataFromRaw(beforeRaw);
   const policy = runtimePolicy ?? getOrchestratorPolicy(Object.keys(profileData.models || {}));
-  writeProfileData(profilePath, nextProfile, policy);
-  return { profile: nextProfile, changed: true, version };
+  const currentModel = pending.field === PROFILE_PHASE_MODEL_FIELD.FALLBACK
+    ? profileData.fallback?.[pending.agentName]
+    : profileData.models?.[pending.agentName];
+  const nextProfile: ProfileData = {
+    ...profileData,
+    models: { ...(profileData.models || {}) },
+    ...(profileData.fallback ? { fallback: { ...profileData.fallback } } : {}),
+  };
+
+  if (pending.field === PROFILE_PHASE_MODEL_FIELD.FALLBACK) {
+    nextProfile.fallback = { ...(nextProfile.fallback || {}), [pending.agentName]: pending.modelId };
+    const resolvedEffort = resolvePendingReasoningEffort(context, pending.modelId, effortSelection || "provider-default");
+    const fallbackConfigKey = `${pending.agentName}-fallback`;
+    const nextConfigs = { ...(nextProfile.configs || {}) };
+    if (resolvedEffort) {
+      nextConfigs[fallbackConfigKey] = {
+        ...(nextConfigs[fallbackConfigKey] || {}),
+        reasoningEffort: resolvedEffort,
+      };
+    } else {
+      delete nextConfigs[fallbackConfigKey];
+    }
+    delete nextProfile.configs;
+    if (Object.keys(nextConfigs).length > 0) nextProfile.configs = nextConfigs;
+  } else {
+    const resolvedEffort = resolvePendingReasoningEffort(context, pending.modelId, effortSelection || "provider-default");
+    const mutation = preparePrimaryModelMutation(nextProfile, pending.agentName, pending.modelId, policy);
+    const reasonedProfile = updateProfileReasoningEffort(mutation.profile, mutation.agentName, resolvedEffort);
+    delete nextProfile.configs;
+    Object.assign(nextProfile, reasonedProfile);
+  }
+
+  const effortConfigKey = pending.field === PROFILE_PHASE_MODEL_FIELD.FALLBACK
+    ? `${pending.agentName}-fallback`
+    : pending.agentName;
+  const currentEffort = profileData.configs?.[effortConfigKey]?.reasoningEffort;
+  const nextEffort = nextProfile.configs?.[effortConfigKey]?.reasoningEffort;
+  const changed = currentModel !== pending.modelId || currentEffort !== nextEffort;
+  const contextValue = context || { providers: [], effortPolicy: "none" as const };
+  if (!changed) return { profile: profileData, changed: false, context: contextValue };
+
+  const operation: PhaseProfileVersionOperation = {
+    source: PROFILE_VERSION_SOURCE.PHASE,
+    phase: pending.agentName,
+    field: pending.field,
+    modelId: pending.modelId,
+    changedPhases: 1,
+  };
+  const version = createProfileVersion(
+    profilePath,
+    operation,
+    buildPhaseOperationSummary(pending.agentName, pending.field, pending.modelId),
+    DEFAULT_PROFILE_VERSION_RETENTION,
+    beforeRaw,
+  );
+  persistVersionedProfileMutation(profilePath, nextProfile, version, policy);
+  return { profile: nextProfile, changed: true, version, versionId: version.id, context: contextValue };
+}
+
+function resolvePendingReasoningEffort(
+  context: ModelMutationContext | undefined,
+  modelId: string,
+  selection: string,
+): string | undefined {
+  const providers = context?.providers || [];
+  const resolved = resolveReasoningEffortSelection(providers as any[], modelId, selection);
+  return resolved.value;
 }
 
 /**
@@ -994,8 +1401,8 @@ export function detectActiveProfileFile(files: string[], api: any): string | und
   ), policy);
   const activeFallbackModels: ProfileFallbackModels = Object.fromEntries(
     Object.entries(activeAgents)
-      .filter(([name, value]: any) => isSddFallbackAgent(name) && typeof value?.model === "string" && value.model)
-      .map(([name, value]: any) => [name.replace(/-fallback$/, ""), value.model])
+      .map(([name, value]: any) => [deriveFallbackProfileKey(name), value?.model])
+      .filter(([derived, model]) => Boolean(derived) && typeof model === "string" && model)
   );
 
   const primaryMatches: Array<{ file: string; fallback: ProfileFallbackModels }> = [];
@@ -1066,12 +1473,13 @@ export function validateProfileFallbackMapping(config: any, fallback: ProfileFal
   const agents = config?.agent || {};
 
   for (const [baseAgentName, model] of Object.entries(fallback || {})) {
-    if (!isFallbackEligibleSddAgent(baseAgentName)) {
+    const isStoredOnlyCatalogKey = isCatalogVisibleAgent(baseAgentName);
+    if (!isFallbackEligibleSddAgent(baseAgentName) && !isStoredOnlyCatalogKey) {
       errors.push(`Invalid fallback target '${baseAgentName}'. Must be a managed base agent (sdd-*, review-*, jd-*, excluding sdd-orchestrator).`);
       continue;
     }
 
-    if (!agents[baseAgentName]) {
+    if (isFallbackEligibleSddAgent(baseAgentName) && !agents[baseAgentName]) {
       errors.push(`Fallback target '${baseAgentName}' does not exist in active config.`);
       continue;
     }
@@ -1090,24 +1498,48 @@ function normalizeForFallbackCompare(agentConfig: any): any {
   return clone;
 }
 
+function hasExplicitFallbackOverride(fallbackModels: ProfileFallbackModels, agentName: string): boolean {
+  const value = fallbackModels?.[agentName];
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isFallbackSyncBaseAgent(agentName: string, fallbackModels: ProfileFallbackModels): boolean {
+  if (isFallbackEligibleSddAgent(agentName)) return true;
+  return isRuntimeSyncEligibleAgent(agentName) && hasExplicitFallbackOverride(fallbackModels, agentName);
+}
+
 /**
  * Ensures and reconciles *-fallback agents against managed base agents
  */
-export function syncSddFallbackAgents(currentConfig: any, fallbackModels: ProfileFallbackModels): any {
+export function syncSddFallbackAgents(
+  currentConfig: any,
+  fallbackModels: ProfileFallbackModels,
+  fallbackConfigs?: ProfileConfigs,
+): any {
   const nextConfig = JSON.parse(JSON.stringify(currentConfig || {}));
   if (!nextConfig.agent) nextConfig.agent = {};
 
-  const baseAgents = listFallbackEligibleSddAgents(nextConfig);
+  const baseAgents = Object.keys(nextConfig.agent).filter((name) => isFallbackSyncBaseAgent(name, fallbackModels));
+  const canonicalEligibleSet = new Set(
+    FALLBACK_SYNC_BASE_ORDER
+  );
 
   for (const baseAgentName of baseAgents) {
     const baseConfig = nextConfig.agent?.[baseAgentName];
     if (!baseConfig || typeof baseConfig !== "object") continue;
 
+    const isCanonical = canonicalEligibleSet.has(baseAgentName);
+    const hasExplicitOverride = hasExplicitFallbackOverride(fallbackModels, baseAgentName);
+
+    // Explicit-only gate: do not synthesize/override fallback for dynamic primary unless explicit in profile
+    if (!isCanonical && !hasExplicitOverride) {
+      continue;
+    }
+
     const fallbackAgentName = `${baseAgentName}-fallback`;
-    const resolvedFallbackModel =
-      (typeof fallbackModels?.[baseAgentName] === "string" && fallbackModels[baseAgentName].trim())
-        ? fallbackModels[baseAgentName]
-        : baseConfig?.model;
+    const resolvedFallbackModel = hasExplicitOverride
+      ? fallbackModels[baseAgentName].trim()
+      : baseConfig?.model;
 
     if (!resolvedFallbackModel) continue;
 
@@ -1115,6 +1547,19 @@ export function syncSddFallbackAgents(currentConfig: any, fallbackModels: Profil
       ...JSON.parse(JSON.stringify(baseConfig)),
       model: resolvedFallbackModel,
     };
+    const fallbackEffort = fallbackConfigs?.[fallbackAgentName]?.reasoningEffort;
+    if (fallbackEffort && fallbackEffort !== "provider-default") {
+      desiredFallbackConfig.reasoningEffort = fallbackEffort;
+      desiredFallbackConfig.options = {
+        ...(desiredFallbackConfig.options || {}),
+        reasoningEffort: fallbackEffort,
+      };
+    } else {
+      delete desiredFallbackConfig.reasoningEffort;
+      if (desiredFallbackConfig.options && typeof desiredFallbackConfig.options === "object") {
+        delete desiredFallbackConfig.options.reasoningEffort;
+      }
+    }
 
     const currentFallbackConfig = nextConfig.agent[fallbackAgentName];
 
@@ -1162,13 +1607,42 @@ function applyProfileModelsToConfig(currentConfig: any, profileModels: ProfileMo
   return nextConfig;
 }
 
+function isCompleteAgentDefinition(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export function discoverInstalledAgentDefinitions(
+  diskConfig: any,
+  runtimeConfig: any,
+  profileModels: ProfileModels,
+): { config: any; models: ProfileModels; missing: string[] } {
+  const config = JSON.parse(JSON.stringify(diskConfig || {}));
+  const diskAgents = diskConfig?.agent || {};
+  const runtimeAgents = runtimeConfig?.agent || {};
+  config.agent = { ...(config.agent || {}) };
+
+  const models: ProfileModels = {};
+  const missing: string[] = [];
+  for (const [agentName, modelId] of Object.entries(profileModels || {})) {
+    const definition = diskAgents[agentName] ?? runtimeAgents[agentName];
+    if (!isCompleteAgentDefinition(definition)) {
+      missing.push(agentName);
+      continue;
+    }
+    config.agent[agentName] = JSON.parse(JSON.stringify(definition));
+    models[agentName] = modelId;
+  }
+
+  return { config, models, missing };
+}
+
 /**
  * Applies full profile data to config (primary models + fallback reconciliation)
  */
 export function applyProfileDataToConfig(currentConfig: any, profile: ProfileData): any {
   const withPrimaryModels = applyProfileModelsToConfig(currentConfig, profile.models || {});
   const fallbackModels = profile.fallback || {};
-  const withFallback = syncSddFallbackAgents(withPrimaryModels, fallbackModels);
+  const withFallback = syncSddFallbackAgents(withPrimaryModels, fallbackModels, profile.configs);
   const policy = getOrchestratorPolicy(Object.keys(withFallback?.agent || {}), withFallback?.default_agent);
   return applyProfileReasoningEffort(withFallback, profile, [], policy).config;
 }
@@ -1213,14 +1687,21 @@ export async function activateProfileFile(api: any, profilePath: string, profile
       currentConfig = globalConfigResult?.data || {};
     }
 
+    const runtimeConfigResult = await api.client.global.config.get();
+    const runtimeConfig = runtimeConfigResult?.data || {};
     const policy = getOrchestratorPolicy(Object.keys(currentConfig?.agent || {}), currentConfig?.default_agent);
-    const nextConfigWithModels = applyProfileModelsToConfig(currentConfig, canonicalizeProfileModels(profileData.models || {}, policy));
+    const discovered = discoverInstalledAgentDefinitions(
+      currentConfig,
+      runtimeConfig,
+      canonicalizeProfileModels(profileData.models || {}, policy),
+    );
+    const nextConfigWithModels = applyProfileModelsToConfig(discovered.config, discovered.models);
     const fallbackValidationErrors = validateProfileFallbackMapping(nextConfigWithModels, profileData.fallback || {});
     if (fallbackValidationErrors.length > 0) {
       throw new Error(fallbackValidationErrors.join(" | "));
     }
 
-    const nextConfigWithFallback = syncSddFallbackAgents(nextConfigWithModels, profileData.fallback || {});
+    const nextConfigWithFallback = syncSddFallbackAgents(nextConfigWithModels, profileData.fallback || {}, profileData.configs);
     const reasoningResult = applyProfileReasoningEffort(nextConfigWithFallback, profileData, api?.state?.provider || [], policy);
     const nextConfig = reasoningResult.config;
 
@@ -1237,10 +1718,14 @@ export async function activateProfileFile(api: any, profilePath: string, profile
       }
     }
 
-    if (reasoningResult.warnings.length > 0) {
+    const warnings = [
+      ...(discovered.missing.length > 0 ? [`Missing agent definitions: ${discovered.missing.join(", ")}`] : []),
+      ...reasoningResult.warnings,
+    ];
+    if (warnings.length > 0) {
       api.ui.toast({
         title: "Activation Warning",
-        message: reasoningResult.warnings.join(" | "),
+        message: warnings.join(" | "),
         variant: "warning",
       });
     }

@@ -6,15 +6,45 @@
  * and profile parsing.
  */
 
-import { ActiveProfileState } from "./types";
+import type { ActiveProfileState, PersistibleAgentKey } from "./types";
 import { getOrchestratorPolicy } from "./orchestrator";
 import { createLogger } from "./logger";
 
 const log = createLogger("utils");
 
 const MANAGED_AGENT_PREFIXES = ["sdd-", "review-", "jd-"];
-const MANAGED_SDD_AGENT_EXCEPTIONS = new Set(["gentle-orchestrator"]);
-const FALLBACK_INELIGIBLE_AGENTS = new Set(["sdd-orchestrator", "gentle-orchestrator"]);
+const MANAGED_SDD_AGENT_EXCEPTIONS = new Set(["gentle-orchestrator", "model-audit"]);
+const FALLBACK_INELIGIBLE_AGENTS = new Set([
+  "sdd-orchestrator",
+  "gentle-orchestrator",
+  "sdd-ORCHETATOR",
+  "model-audit",
+]);
+const PERSISTIBLE_CATALOG_AGENT_KEYS = new Set<PersistibleAgentKey>([
+  "sdd-ORCHETATOR", "sdd-propose", "sdd-design", "sdd-apply", "sdd-verify", "sdd-spec",
+  "sdd-onboard", "sdd-explore", "sdd-init", "sdd-tasks", "sdd-archive", "jd-judge-a",
+  "jd-judge-b", "jd-fix-agent", "review-readability", "review-reliability", "review-resilience",
+  "review-validator", "review-refuter", "review-risk", "model-audit",
+  "gentle-ai-windows-validator", "compaction", "summary", "title",
+]);
+const RUNTIME_SYNC_EXCLUDED_CATALOG_KEYS = new Set([
+  "sdd-ORCHETATOR",
+  "compaction",
+  "summary",
+  "title",
+]);
+export const RESERVED_RUNTIME_AGENT_NAMES = new Set([
+  "build",
+  "plan",
+  "general",
+  "explore",
+  "compaction",
+  "summary",
+  "title",
+  "gentle-reviewer",
+  "gentle-worker",
+  "sdd-orchestrator",
+]);
 
 /**
  * Formats a token count into a human-readable context string
@@ -84,6 +114,34 @@ export function isPrimarySddAgent(agentName: string): boolean {
  */
 export function isFallbackEligibleSddAgent(agentName: string): boolean {
   return isPrimarySddAgent(agentName) && !FALLBACK_INELIGIBLE_AGENTS.has(agentName);
+}
+
+/**
+ * Returns whether a runtime agent can be edited as a primary model target.
+ * Unknown runtime names are valid primaries unless they are reserved or a fallback.
+ */
+export function isEditablePrimaryAgent(agentName: string): boolean {
+  return Boolean(
+    typeof agentName === "string" &&
+      agentName.length > 0 &&
+      (!RESERVED_RUNTIME_AGENT_NAMES.has(agentName) || isCatalogVisibleAgent(agentName)) &&
+      !agentName.endsWith("-fallback")
+  );
+}
+
+/** Returns whether a key belongs to the approved visible catalog. */
+export function isCatalogVisibleAgent(agentName: unknown): agentName is PersistibleAgentKey {
+  return typeof agentName === "string" && PERSISTIBLE_CATALOG_AGENT_KEYS.has(agentName as PersistibleAgentKey);
+}
+
+/** Returns whether a key may be retained as an approved catalog assignment. */
+export function isPersistibleAgentKey(agentName: unknown): agentName is PersistibleAgentKey {
+  return isCatalogVisibleAgent(agentName);
+}
+
+/** Returns whether a catalog key is safe to synchronize into runtime config. */
+export function isRuntimeSyncEligibleAgent(agentName: unknown): agentName is PersistibleAgentKey {
+  return isCatalogVisibleAgent(agentName) && !RUNTIME_SYNC_EXCLUDED_CATALOG_KEYS.has(agentName);
 }
 
 /**

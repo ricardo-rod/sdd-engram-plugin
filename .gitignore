@@ -4,6 +4,11 @@ coverage
 *.tgz
 examples/.tmp-run
 .atl
-.pi 
+.pi
 .pi-lens
+.codegraph/
+.engram/chunks/
+.engram/manifest.json
+/Task-Manager-Portable.html
+
 

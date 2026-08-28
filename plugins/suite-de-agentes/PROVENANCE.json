@@ -1,0 +1,26 @@
+{
+  "source": "https://github.com/RamonsDka/suite-de-agentes.git",
+  "commit": "f49270e8e738ef1babe6210c910f786b9da735e0",
+  "version": "1.1.0",
+  "manifestAlgorithm": "sorted entries <git_mode> <git_blob_oid> <sha256_content> <bytes> <lines> <rel_path>\\n",
+  "manifestSha256": "438d0ae91c0ea4add7b27a466072457151787b108053d16d38a58aa5c83d0085",
+  "inventory": {
+    "files": 87,
+    "textFiles": 83,
+    "textLines": 13088,
+    "binaryFiles": 4,
+    "binaryBytes": 233621,
+    "totalBytes": 794681
+  },
+  "exclusions": [
+    ".git/**",
+    "node_modules/**",
+    "dist/**",
+    "coverage/**",
+    "openspec/**",
+    ".history/**",
+    ".atl/**",
+    ".codegraph/**",
+    ".github/**"
+  ]
+}

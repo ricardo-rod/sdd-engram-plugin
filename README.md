@@ -241,48 +241,30 @@ Version history is stored outside the profile JSON under `~/.config/opencode/pro
 
 ## Screenshots
 
-This is what users will see after installing the plugin:
+Visual walkthrough of profile management, model assignments, bulk actions, and reasoning effort:
 
-### Main entry and profile management
+### Profile Management & Active Status
 
 <p align="center">
-  <img src="docs/images/captura1.png" alt="Main plugin menu" width="720" />
+  <img src="docs/images/perfil-1.png" alt="Profile management and active status" width="720" />
 </p>
 
+### Model & Fallback Assignment
+
 <p align="center">
-  <img src="docs/images/captura2.png" alt="Profile management screen" width="720" />
+  <img src="docs/images/perfil-2.png" alt="Agent model and fallback assignment" width="720" />
 </p>
 
+### Bulk Profile Actions
+
 <p align="center">
-  <img src="docs/images/captura3.png" alt="Profile detail screen" width="720" />
+  <img src="docs/images/acciones-masivas-del-perfil.png" alt="Bulk profile actions" width="720" />
 </p>
 
-<p align="center">
-  <img src="docs/images/captura4.png" alt="Agent model selection" width="720" />
-</p>
+### Reasoning Effort Configuration
 
 <p align="center">
-  <img src="docs/images/captura5.png" alt="Fallback model configuration" width="720" />
-</p>
-
-### Engram memory browser
-
-<p align="center">
-  <img src="docs/images/captura6.png" alt="Project memories access" width="720" />
-</p>
-
-<p align="center">
-  <img src="docs/images/captura6-memory.png" alt="Project memories list" width="720" />
-</p>
-
-<p align="center">
-  <img src="docs/images/captura6-memory-detail.png" alt="Memory detail view" width="720" />
-</p>
-
-### Profile JSON preview
-
-<p align="center">
-  <img src="docs/images/captura7-json.png" alt="Profile JSON preview" width="720" />
+  <img src="docs/images/Nivel-de-esfuerzo.png" alt="Reasoning effort level configuration" width="720" />
 </p>
 
 ---

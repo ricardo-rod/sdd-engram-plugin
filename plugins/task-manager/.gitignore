@@ -1,0 +1,24 @@
+node_modules/
+test-results/
+.playwright-mcp/
+.codegraph/
+.hallmark/
+.atl/
+.opencode/
+.impeccable/
+*.log
+.DS_Store
+Thumbs.db
+
+# Local planning and internal harness context
+openspec/
+PRODUCT.md
+DESIGN.md
+
+# Local screenshots and generated sharing bundles not used by the public repo
+drop-in-task-manager-*.png
+dist-share/
+project-tracking-dashboard/
+
+# Keep the public portable file at repository root
+!Task-Manager-Portable.html

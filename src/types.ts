@@ -17,6 +17,74 @@ export type ActiveProfileState = {
 
 export type BadgeDisplayMode = "model" | "profile";
 
+export type DialogSize = "medium" | "large" | "xlarge";
+export type AgentFamily = "Orchestrator" | "SDD" | "JD" | "Review" | "Tools" | "Fallbacks" | "Custom";
+export type AssignmentField = "model" | "fallback";
+export type RuntimeAgentClass = "reserved" | "primary" | "fallback";
+
+export type PersistibleAgentKey =
+  | "sdd-ORCHETATOR"
+  | "sdd-propose"
+  | "sdd-design"
+  | "sdd-apply"
+  | "sdd-verify"
+  | "sdd-spec"
+  | "sdd-onboard"
+  | "sdd-explore"
+  | "sdd-init"
+  | "sdd-tasks"
+  | "sdd-archive"
+  | "jd-judge-a"
+  | "jd-judge-b"
+  | "jd-fix-agent"
+  | "review-readability"
+  | "review-reliability"
+  | "review-resilience"
+  | "review-validator"
+  | "review-refuter"
+  | "review-risk"
+  | "model-audit"
+  | "gentle-ai-windows-validator"
+  | "compaction"
+  | "summary"
+  | "title";
+
+export type CatalogGroup = {
+  id: string;
+  labelEs: string;
+  agents: readonly PersistibleAgentKey[];
+};
+
+export type DialogCatalogRow = { kind: "agent"; key: PersistibleAgentKey };
+
+export type AgentOrderMetadata = {
+  family: AgentFamily;
+  knownIndex: number | null;
+};
+
+export type RuntimeAgentInventoryItem = {
+  runtimeName: string;
+  profileKey: string;
+  field: AssignmentField;
+  classification: RuntimeAgentClass;
+  order: AgentOrderMetadata;
+  managedSdd: boolean;
+  fallbackEligible: boolean;
+};
+
+/** A runtime-derived primary profile field eligible for profile-wide configuration. */
+export type ConfigurableProfileTarget = Pick<RuntimeAgentInventoryItem, "profileKey" | "field">;
+
+export type CatalogEntry = {
+  displayName: string;
+  profileKey: string;
+  field: AssignmentField;
+  family: AgentFamily;
+  base: boolean;
+  isFallback: boolean;
+  orderIndex: number;
+};
+
 /**
  * Mapping of profile names to their model identifiers
  */
@@ -31,6 +99,11 @@ export type ProfileAgentConfig = {
   reasoningEffort?: string;
 };
 
+/**
+ * Agent-name keyed reasoning configuration. Fallback effort is stored using
+ * the runtime fallback agent key (`${primary}-fallback`) to keep it separate
+ * from the primary agent's reasoning configuration.
+ */
 export type ProfileConfigs = Record<string, ProfileAgentConfig>;
 
 /**
@@ -76,6 +149,18 @@ export const PROFILE_PHASE_MODEL_FIELD = {
 
 export type ProfilePhaseModelField = (typeof PROFILE_PHASE_MODEL_FIELD)[keyof typeof PROFILE_PHASE_MODEL_FIELD];
 
+export type PendingModelSelection = {
+  agentName: string;
+  field: ProfilePhaseModelField;
+  modelId: string;
+};
+
+export type StagedModelSelection = {
+  pending: PendingModelSelection;
+  modelChanged: boolean;
+  requestReasoningEffort: boolean;
+};
+
 export type BulkProfileVersionOperation = BulkAssignmentOperation & {
   source: typeof PROFILE_VERSION_SOURCE.BULK;
   changedPhases?: number;
@@ -120,9 +205,38 @@ export type UpdateProfilePhaseModelResult = {
   profile: ProfileData;
   changed: boolean;
   version?: ProfileVersion;
+  versionId?: string;
+  context?: ModelMutationContext;
+};
+
+export type BulkProfileOverwriteResult = {
+  profile: ProfileData;
+  modelsAssigned: number;
+  effortsAssigned: number;
+  changed: boolean;
+};
+
+export type ProfileWriteOptions = {
+  preserveProviderDefaultReasoning?: boolean;
 };
 
 export type ProfileVersionMetadata = Omit<ProfileVersion, "beforeRaw">;
+
+export type ModelMutationEffortPolicy = "interactive-clear" | "bulk-compatible-prune" | "none";
+
+export type ModelMutationContext = {
+  providers: unknown[];
+  runtimePrimaryNames?: readonly string[];
+  effortPolicy: ModelMutationEffortPolicy;
+};
+
+export type ProfileWriteTransaction = {
+  profile: ProfileData;
+  changed: boolean;
+  version?: ProfileVersion;
+  versionId?: string;
+  context: ModelMutationContext;
+};
 
 /**
  * Represents the persistent state of profiles

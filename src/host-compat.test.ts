@@ -4,6 +4,7 @@ import {
 	resetHostCompatStateForTests,
 	safeHostAction,
 	safeHostAsyncAction,
+	safeSetDialogSize,
 	safeSlotRender,
 } from "./host-compat";
 
@@ -131,6 +132,39 @@ describe("safeHostAsyncAction", () => {
 		expect(result).toBe("fallback");
 		expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
 		expect(consoleErrorSpy.mock.calls[0]?.[0]).toContain("OpenCode will continue");
+	});
+});
+
+describe("safeSetDialogSize (T27, T28)", () => {
+	it.each([
+		["undefined api", undefined],
+		["empty api", {}],
+		["empty ui", { ui: {} }],
+		["empty dialog", { ui: { dialog: {} } }],
+		["undefined setSize", { ui: { dialog: { setSize: undefined } } }],
+	])("T27: degrades safely when setSize is missing on %s", (_, api) => {
+		expect(() => safeSetDialogSize(api as any, "large")).not.toThrow();
+	});
+
+	it.each([
+		["Error instance", new Error("setSize crash")],
+		["string throwable", "custom setSize failure"],
+	])("T28: catches and logs when setSize throws %s", (_, errorToThrow) => {
+		const setSizeSpy = vi.fn().mockImplementation(() => {
+			throw errorToThrow;
+		});
+		const api = { ui: { dialog: { setSize: setSizeSpy } } };
+		expect(() => safeSetDialogSize(api as any, "xlarge")).not.toThrow();
+		expect(setSizeSpy).toHaveBeenCalledWith("xlarge");
+		expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+	});
+
+	it("invokes setSize with target DialogSize when available", () => {
+		const setSizeSpy = vi.fn();
+		const api = { ui: { dialog: { setSize: setSizeSpy } } };
+		safeSetDialogSize(api as any, "medium");
+		expect(setSizeSpy).toHaveBeenCalledWith("medium");
+		expect(consoleErrorSpy).not.toHaveBeenCalled();
 	});
 });
 });

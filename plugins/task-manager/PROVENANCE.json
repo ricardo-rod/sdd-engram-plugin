@@ -1,0 +1,22 @@
+{
+  "source": "https://github.com/RamonsDka/task-manager-portable.git",
+  "commit": "8264461d8e4fdf6df9072f50401692a51b6355ff",
+  "version": "1.1.0",
+  "manifestAlgorithm": "sorted entries <git_mode> <git_blob_oid> <sha256_content> <bytes> <lines> <rel_path>\\n",
+  "manifestSha256": "1e4ccacee8f8729a744de91be62da4393e18eb404a81bf62397e21e7249ea646",
+  "inventory": {
+    "files": 50,
+    "textFiles": 43,
+    "textLines": 16081,
+    "binaryFiles": 7,
+    "binaryBytes": 5261911,
+    "totalBytes": 6066159
+  },
+  "exclusions": [
+    ".git/**",
+    "node_modules/**",
+    "dist/**",
+    "coverage/**",
+    ".github/**"
+  ]
+}

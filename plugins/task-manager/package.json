@@ -1,0 +1,27 @@
+{
+  "name": "task-manager-portable",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Single-file offline project dashboard with zero runtime dependencies",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RamonsDka/task-manager-portable.git"
+  },
+  "homepage": "https://github.com/RamonsDka/task-manager-portable#readme",
+  "bugs": {
+    "url": "https://github.com/RamonsDka/task-manager-portable/issues"
+  },
+  "license": "MIT",
+  "scripts": {
+    "test": "node scripts/run-tests.mjs",
+    "check": "tsc --noEmit --allowJs --checkJs",
+    "assemble": "node scripts/assemble.mjs",
+    "test:browser": "playwright test tests/browser-e2e.spec.mjs --workers=1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "happy-dom": "20.11.6",
+    "typescript": "5.8.3"
+  }
+}

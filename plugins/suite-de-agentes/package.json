@@ -1,0 +1,47 @@
+{
+  "name": "opencode-agent-suite",
+  "version": "1.1.0",
+  "description": "Named agent suites, model profiles, and per-turn consent controls for OpenCode",
+  "type": "module",
+  "main": "./dist/server.js",
+  "exports": {
+    ".": { "import": "./dist/server.js" },
+    "./server": { "import": "./dist/server.js" },
+    "./tui": { "import": "./dist/tui.js" },
+    "./core": { "import": "./dist/core/index.js" }
+  },
+  "files": ["dist", "README.md", "LICENSE", "docs", "examples", "install.ps1", "install.sh", "scripts"],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "package": "node scripts/package.mjs",
+    "prepack": "npm run build"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.18.5",
+    "@opentui/core": ">=0.4.2 <1",
+    "@opentui/keymap": ">=0.4.2 <1",
+    "@opentui/solid": ">=0.4.2 <1",
+    "solid-js": "^1.9.12"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "1.18.5"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "1.18.5",
+    "@opentui/core": "0.4.5",
+    "@opentui/keymap": "0.4.5",
+    "@opentui/solid": "0.4.5",
+    "@types/babel__core": "^7.20.5",
+    "@types/node": "25.7.0",
+    "esbuild-plugin-solid": "0.6.0",
+    "solid-js": "^1.9.12",
+    "tsup": "8.5.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
+  },
+  "engines": { "node": ">=24 <25", "opencode": ">=1.18.5" },
+  "license": "MIT"
+}

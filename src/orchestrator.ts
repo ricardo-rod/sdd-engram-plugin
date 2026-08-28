@@ -1,13 +1,26 @@
 export const LEGACY_ORCHESTRATOR = "sdd-orchestrator" as const;
 export const UPDATED_ORCHESTRATOR = "gentle-orchestrator" as const;
+export const CATALOG_ORCHESTRATOR = "sdd-ORCHETATOR" as const;
 
 export type CanonicalOrchestratorName = typeof LEGACY_ORCHESTRATOR | typeof UPDATED_ORCHESTRATOR;
+export type OrchestratorAlias = CanonicalOrchestratorName | typeof CATALOG_ORCHESTRATOR;
 
 export type OrchestratorPolicy = {
   canonicalName: CanonicalOrchestratorName;
-  aliasNames: CanonicalOrchestratorName[];
+  aliasNames: OrchestratorAlias[];
   migrationEnabled: boolean;
 };
+
+const LEGACY_ALIASES = [
+  LEGACY_ORCHESTRATOR,
+  UPDATED_ORCHESTRATOR,
+  CATALOG_ORCHESTRATOR,
+ ] as OrchestratorAlias[];
+const UPDATED_ALIASES = [
+  UPDATED_ORCHESTRATOR,
+  LEGACY_ORCHESTRATOR,
+  CATALOG_ORCHESTRATOR,
+ ] as OrchestratorAlias[];
 
 export function getOrchestratorPolicy(agentNames: string[], defaultAgent?: string): OrchestratorPolicy {
   const all = new Set([...(agentNames || []), defaultAgent || ""]);
@@ -15,14 +28,14 @@ export function getOrchestratorPolicy(agentNames: string[], defaultAgent?: strin
   const hasLegacy = all.has(LEGACY_ORCHESTRATOR);
 
   if (hasUpdated) {
-    return { canonicalName: UPDATED_ORCHESTRATOR, aliasNames: [UPDATED_ORCHESTRATOR, LEGACY_ORCHESTRATOR], migrationEnabled: true };
+    return { canonicalName: UPDATED_ORCHESTRATOR, aliasNames: UPDATED_ALIASES, migrationEnabled: true };
   }
 
   if (hasLegacy) {
-    return { canonicalName: LEGACY_ORCHESTRATOR, aliasNames: [LEGACY_ORCHESTRATOR, UPDATED_ORCHESTRATOR], migrationEnabled: false };
+    return { canonicalName: LEGACY_ORCHESTRATOR, aliasNames: LEGACY_ALIASES, migrationEnabled: false };
   }
 
-  return { canonicalName: LEGACY_ORCHESTRATOR, aliasNames: [LEGACY_ORCHESTRATOR, UPDATED_ORCHESTRATOR], migrationEnabled: false };
+  return { canonicalName: LEGACY_ORCHESTRATOR, aliasNames: LEGACY_ALIASES, migrationEnabled: false };
 }
 
 export function resolveCanonicalOrchestratorModel(models: Record<string, string>, policy: OrchestratorPolicy): string | undefined {
@@ -38,6 +51,7 @@ export function canonicalizeProfileModels(models: Record<string, string>, policy
   const resolved = resolveCanonicalOrchestratorModel(next, policy);
   delete next[LEGACY_ORCHESTRATOR];
   delete next[UPDATED_ORCHESTRATOR];
+  delete next[CATALOG_ORCHESTRATOR];
   if (resolved) next[policy.canonicalName] = resolved;
   return next;
 }
@@ -53,6 +67,7 @@ export function canonicalizeAgentConfig(agentConfig: Record<string, any>, policy
 
   delete next[LEGACY_ORCHESTRATOR];
   delete next[UPDATED_ORCHESTRATOR];
+  delete next[CATALOG_ORCHESTRATOR];
 
   if (canonicalModel) {
     next[policy.canonicalName] = {

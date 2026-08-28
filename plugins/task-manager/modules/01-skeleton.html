@@ -1,0 +1,2134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drop-In Task Manager — Obsidian Technical Cockpit</title>
+  <!-- AI-EDITABLE: TOKENS — verbatim from prototype + extended obsidian palette -->
+  <style>
+    :root {
+      /* Verbatim tokens from prototype */
+      --bg-canvas: #0b0e14;
+      --bg-surface-primary: #161b22;
+      --bg-surface-secondary: #12161d;
+      --bg-surface-tertiary: #1c222b;
+      --bg-surface-hover: #212833;
+      --border-subtle: #30363d;
+      --border-medium: #424b57;
+      --border-focus: #58a6ff;
+      --text-primary: #ffffff;
+      --text-secondary: #a0a0a0;
+      --text-tertiary: #8b949e;
+      --text-muted: #4b5563;
+      --accent-blue: #58a6ff;
+      --accent-green: #3fb950;
+      --accent-purple: #bc8cff;
+      --accent-amber: #d29922;
+      --accent-red: #f85149;
+      --color-completed: #238636;
+      --color-completed-bright: #3fb950;
+      --color-completed-bg: rgba(63, 185, 80, 0.12);
+      --color-completed-border: #3fb950;
+      --color-inprogress: #1f6feb;
+      --color-inprogress-bright: #58a6ff;
+      --color-inprogress-bg: rgba(88, 166, 255, 0.12);
+      --color-inprogress-border: #58a6ff;
+      --color-pending: #d29922;
+      --color-pending-bright: #d29922;
+      --color-pending-bg: rgba(210, 153, 34, 0.12);
+      --color-pending-border: #d29922;
+      --color-blocked: #da3633;
+      --color-blocked-bright: #f85149;
+      --color-blocked-bg: rgba(248, 81, 73, 0.12);
+      --color-blocked-border: #f85149;
+      --color-git: #8957e5;
+      --color-git-bright: #bc8cff;
+      --color-git-bg: rgba(188, 140, 255, 0.12);
+      --color-git-border: #bc8cff;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 12px;
+      --radius-full: 9999px;
+      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+      --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+      --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+
+      /* Extended high-density theme variables */
+      --glow-blue: 0 0 16px rgba(88, 166, 255, 0.2);
+      --glow-green: 0 0 16px rgba(63, 185, 80, 0.2);
+      --glow-amber: 0 0 16px rgba(210, 153, 34, 0.2);
+      --glow-red: 0 0 16px rgba(248, 81, 73, 0.25);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { max-width: 100%; overflow-x: hidden; }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+      background-image:
+        radial-gradient(circle at 50% 0%, rgba(31, 111, 235, 0.08) 0%, transparent 60%),
+        linear-gradient(to bottom, rgba(22, 27, 34, 0.4) 1px, transparent 1px),
+        linear-gradient(to right, rgba(22, 27, 34, 0.4) 1px, transparent 1px);
+      background-size: 100% 100%, 32px 32px, 32px 32px;
+      background-position: 0 0, -1px -1px, -1px -1px;
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg-canvas); }
+    ::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-medium); }
+
+    .app-container {
+      max-width: 1720px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 16px 24px 64px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .app-container,
+    .view-container,
+    .dashboard-layout,
+    .dashboard-main-col,
+    .dashboard-side-col,
+    .panel-card,
+    .metric-card,
+    .kanban-column { min-width: 0; max-width: 100%; }
+
+    /* Responsive verification matrix: 320×568, 375×812, 390×844, 414×896,
+       768×1024, 1024×768, 1280×720, 1440×1000, 1920×1080.
+       Browser geometry evidence is owned by the Unit 5 file:// harness. */
+    button, input, select, [role="tab"], [data-note-expand], [data-copy-prompt],
+    [data-state-copy], [data-state-export] { min-width: 44px; min-height: 44px; }
+    button:focus-visible, input:focus-visible, select:focus-visible, [role="tab"]:focus-visible,
+    [data-note-expand]:focus-visible, [data-copy-prompt]:focus-visible, [data-state-copy]:focus-visible,
+    [data-state-export]:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+    .panel-card, .phase-card { overflow: visible; }
+    .task-note, .task-title, .task-owner-pill, #filter-result-count { min-width: 0; overflow-wrap: anywhere; }
+
+    /* Top Command & Header Bar */
+    .header-panel {
+      background-color: var(--bg-surface-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 14px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      box-shadow: var(--shadow-md);
+      position: relative;
+    }
+
+    .header-brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+    .header-titles { min-width: 0; }
+    .header-icon {
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      filter: drop-shadow(0 0 10px rgba(94, 160, 239, 0.45));
+    }
+    .header-icon svg {
+      width: 38px;
+      height: 38px;
+      display: block;
+    }
+
+    .header-titles h1 {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      letter-spacing: -0.01em;
+      flex-wrap: wrap;
+    }
+
+    .header-titles p {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-top: 1px;
+      overflow-wrap: anywhere;
+    }
+
+    .header-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* Header Cockpit Hub (Center Clock + Last Update) */
+    .header-center-hub {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .digital-clock-card {
+      background: linear-gradient(145deg, var(--bg-surface-secondary), var(--bg-surface-tertiary));
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 6px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      position: relative;
+      min-width: 220px;
+      user-select: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .digital-clock-card:hover {
+      border-color: var(--border-medium);
+      box-shadow: 0 4px 18px rgba(88, 166, 255, 0.15);
+    }
+
+    .clock-display-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .clock-digits-group {
+      display: flex;
+      align-items: baseline;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .clock-digit {
+      font-variant-numeric: tabular-nums;
+      display: inline-block;
+      min-width: 1.25ch;
+      text-align: center;
+    }
+
+    .clock-hours {
+      font-size: 22px;
+      font-weight: 800;
+      color: #58a6ff;
+      background: linear-gradient(135deg, #58a6ff 0%, #79c0ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 6px rgba(88, 166, 255, 0.3));
+    }
+
+    .clock-separator {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-tertiary);
+      margin: 0 1px;
+      animation: clockBlink 1s ease-in-out infinite;
+    }
+
+    .clock-minutes {
+      font-size: 22px;
+      font-weight: 800;
+      color: #ff7b72;
+      background: linear-gradient(135deg, #ff7b72 0%, #ffa657 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 6px rgba(255, 123, 114, 0.3));
+    }
+
+    .clock-sec-sep {
+      font-size: 14px;
+      opacity: 0.6;
+    }
+
+    .clock-seconds {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent-green);
+      min-width: 2ch;
+      filter: drop-shadow(0 0 4px rgba(63, 185, 80, 0.3));
+    }
+
+    .clock-period-group {
+      display: flex;
+      align-items: center;
+    }
+
+    .clock-period {
+      font-size: 10.5px;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      color: var(--accent-amber);
+      padding: 1px 5px;
+      background: var(--color-pending-bg);
+      border: 1px solid var(--color-pending-border);
+      border-radius: var(--radius-sm);
+      letter-spacing: 0.05em;
+    }
+
+    .clock-actions {
+      display: flex;
+      align-items: center;
+      margin-left: 2px;
+    }
+
+    .clock-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      background: var(--bg-surface-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 2px 6px;
+      min-width: 44px;
+      min-height: 28px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      transition: all 0.15s ease;
+    }
+
+    .clock-toggle-btn:hover {
+      background: var(--bg-surface-hover);
+      border-color: var(--border-medium);
+      color: var(--text-primary);
+    }
+
+    .clock-toggle-icon {
+      font-size: 12px;
+      line-height: 1;
+      color: var(--text-tertiary);
+    }
+
+    .clock-meta-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11px;
+      border-top: 1px solid rgba(48, 54, 61, 0.4);
+      padding-top: 2px;
+      margin-top: 1px;
+    }
+
+    .clock-date-text {
+      font-weight: 600;
+      color: var(--accent-purple);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .clock-tz-badge {
+      font-size: 9.5px;
+      font-family: var(--font-mono);
+      color: var(--text-tertiary);
+      background: var(--bg-surface-tertiary);
+      padding: 0 4px;
+      border-radius: 3px;
+      border: 1px solid var(--border-subtle);
+      white-space: nowrap;
+    }
+
+    /* Dynamic Last Update Card */
+    .last-update-card {
+      background: linear-gradient(145deg, var(--bg-surface-secondary), var(--bg-surface-tertiary));
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 6px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 175px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      user-select: none;
+      transition: border-color 0.2s ease;
+    }
+
+    .last-update-card:hover {
+      border-color: var(--border-medium);
+    }
+
+    .last-update-status-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .update-pulse-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background-color: var(--accent-green);
+      box-shadow: 0 0 8px var(--accent-green);
+      display: inline-block;
+      animation: pulseDot 2s infinite ease-in-out;
+      flex-shrink: 0;
+    }
+
+    .last-update-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-tertiary);
+      font-weight: 700;
+    }
+
+    .last-update-time {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .last-update-subtext {
+      font-size: 10.5px;
+      font-family: var(--font-mono);
+      color: var(--text-tertiary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Active Harness Card */
+    .harness-card {
+      background: linear-gradient(145deg, var(--bg-surface-secondary), var(--bg-surface-tertiary));
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 6px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 175px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      user-select: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .harness-card:hover {
+      border-color: var(--border-medium);
+      box-shadow: 0 4px 18px rgba(188, 140, 255, 0.15);
+    }
+
+    .harness-status-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .harness-pulse-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background-color: var(--accent-purple);
+      box-shadow: 0 0 8px var(--accent-purple);
+      display: inline-block;
+      animation: pulseDotPurple 2s infinite ease-in-out;
+      flex-shrink: 0;
+    }
+
+    .harness-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-tertiary);
+      font-weight: 700;
+    }
+
+    .harness-title-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .harness-icon-wrap {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-purple);
+    }
+
+    .harness-name {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+
+    .harness-subtext {
+      font-size: 10.5px;
+      font-family: var(--font-mono);
+      color: var(--text-tertiary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    @keyframes pulseDotPurple {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(188, 140, 255, 0.7); }
+      70% { transform: scale(1.15); box-shadow: 0 0 0 6px rgba(188, 140, 255, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(188, 140, 255, 0); }
+    }
+
+    @keyframes clockBlink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    @keyframes pulseDot {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.7); }
+      70% { transform: scale(1.15); box-shadow: 0 0 0 6px rgba(63, 185, 80, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(63, 185, 80, 0); }
+    }
+
+    /* Nav Tabs Bar */
+    .nav-tabs-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--bg-surface-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 6px 10px;
+      box-shadow: var(--shadow-sm);
+      overflow-x: auto;
+    }
+
+    .tab-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .tab-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-surface-hover);
+    }
+
+    .tab-btn.active {
+      color: #ffffff;
+      background: var(--bg-surface-tertiary);
+      border-color: var(--border-medium);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .tab-btn.active .tab-icon {
+      color: var(--accent-blue);
+    }
+
+    .tab-badge {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-tertiary);
+    }
+
+    .nav-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .search-box {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-surface-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 4px 10px;
+      transition: border-color 0.15s;
+      min-width: 0;
+    }
+
+    .search-box:focus-within {
+      border-color: var(--border-focus);
+    }
+
+    .search-box input {
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      font-size: 12.5px;
+      font-family: var(--font-sans);
+      outline: none;
+      width: 180px;
+    }
+
+    .search-box input::placeholder {
+      color: var(--text-muted);
+    }
+
+    /* Insight and filter controls */
+    .filter-toolbar {
+      display: grid;
+      grid-template-columns: minmax(180px, 1.4fr) repeat(4, minmax(120px, 1fr)) auto;
+      gap: 8px;
+      align-items: end;
+      padding: 12px 18px;
+      background: var(--bg-surface-secondary);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .filter-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .filter-field label {
+      color: var(--text-tertiary);
+      font-size: 11px;
+      font-family: var(--font-mono);
+      letter-spacing: 0.02em;
+    }
+
+    .filter-field input,
+    .filter-field select {
+      width: 100%;
+      min-height: 44px;
+      padding: 6px 8px;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--bg-surface-primary);
+      color: var(--text-primary);
+      font: inherit;
+    }
+
+    .filter-field input::placeholder { color: var(--text-muted); }
+    .filter-field input:focus-visible,
+    .filter-field select:focus-visible,
+    .btn:focus-visible,
+    .tab-btn:focus-visible,
+    .phase-header:focus-visible {
+      outline: 2px solid var(--border-focus);
+      outline-offset: 2px;
+    }
+
+    .filter-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+    }
+
+    #filter-result-count {
+      color: var(--text-tertiary);
+      font: 11px var(--font-mono);
+      white-space: nowrap;
+    }
+
+    #filter-empty-state {
+      margin: 8px 0;
+      padding: 10px 12px;
+      border: 1px dashed var(--border-medium);
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      background: var(--bg-surface-secondary);
+      font-size: 12px;
+    }
+
+    #filter-empty-state[hidden] { display: none; }
+
+    .insight-values {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+      color: var(--text-secondary);
+      font-size: 11.5px;
+    }
+
+    .insight-dimension-line { color: var(--text-tertiary); }
+    .insight-empty { color: var(--text-muted); }
+    .insight-trend { display: flex; flex-direction: column; gap: 3px; }
+    .insight-trend-chart { max-width: 100%; height: auto; }
+    .insight-trend-copy,
+    .insight-forecast { color: var(--text-tertiary); font-size: 11px; }
+
+    .metric-card.metric-insights-band {
+      grid-column: 1 / -1;
+    }
+
+    .insight-band-grid {
+      display: grid;
+      width: 100%;
+      grid-template-columns: minmax(150px, 1.15fr) minmax(126px, 0.85fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(190px, 1.2fr);
+      align-items: start;
+      gap: 14px;
+    }
+
+    .insight-band-region {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .insight-region-label {
+      color: var(--text-tertiary);
+      font: 10px var(--font-mono);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .insight-status-chart,
+    .insight-trend-chart {
+      width: 100%;
+      max-width: 100%;
+    }
+
+    .insight-dimension-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+      gap: 3px 8px;
+      min-width: 0;
+    }
+
+    .insight-dimension-line {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .insight-dimension-line strong { color: var(--text-secondary); }
+
+    .insight-risk-values {
+      display: grid;
+      gap: 4px;
+      color: var(--text-secondary);
+      font-size: 11.5px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.001ms !important;
+      }
+    }
+
+    /* HUD Metrics Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .metric-card {
+      background-color: var(--bg-surface-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: var(--shadow-md);
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+
+    .metric-card:hover {
+      border-color: var(--border-medium);
+    }
+    .metric-card[role="button"] { cursor:pointer; min-height:44px; }
+    .metric-card[role="button"]:focus-visible { outline:2px solid var(--border-focus); outline-offset:3px; border-color:var(--border-focus); }
+    .metric-card[role="button"]:hover { transform:translateY(-2px); box-shadow:var(--shadow-lg); }
+    .metric-details-affordance { position:absolute; right:14px; bottom:10px; color:var(--accent-blue); font:10px var(--font-mono); padding:3px 7px; border:1px solid rgba(88,166,255,.32); border-radius:var(--radius-full); background:var(--color-inprogress-bg); pointer-events:none; z-index:2; }
+    .metric-card-footer-row { display:flex; justify-content:space-between; align-items:center; font-size:11.5px; color:var(--text-tertiary); padding-right:68px; }
+    .metric-card .metric-summary-copy { padding-right:68px; }
+
+    .metric-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: transparent;
+    }
+
+    .metric-card.accent-blue::before { background: var(--accent-blue); }
+    .metric-card.accent-green::before { background: var(--accent-green); }
+    .metric-card.accent-purple::before { background: var(--accent-purple); }
+    .metric-card.accent-amber::before { background: var(--accent-amber); }
+
+    .metric-summary-value { color: var(--text-primary); font: 700 20px var(--font-mono); }
+    .metric-summary-copy { color: var(--text-tertiary); font-size: 11.5px; overflow-wrap: anywhere; }
+
+    @media (max-width: 900px) {
+      .insight-band-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    .metric-top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Main Dashboard Layout */
+    .dashboard-layout {
+      display: grid;
+      grid-template-columns: 1fr 390px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    @media (max-width: 1200px) {
+      .dashboard-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .metrics-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .app-container { padding: 10px 12px 40px; }
+      .header-panel { align-items: flex-start; flex-wrap: wrap; }
+      .header-meta { width: 100%; }
+      .header-center-hub { width: 100%; justify-content: flex-start; }
+      .digital-clock-card, .last-update-card, .harness-card { flex: 1 1 180px; min-width: 0; }
+      .nav-tabs-bar { align-items: flex-start; }
+      .search-box input { width: 100%; min-width: 0; max-width: 100%; }
+      .filter-toolbar { grid-template-columns: 1fr 1fr; align-items: stretch; }
+      .filter-field:first-child, .filter-actions { grid-column: 1 / -1; }
+      .filter-field input, .filter-field select, .filter-actions .btn { min-height: 44px; }
+      .filter-actions { justify-content: space-between; }
+      .metrics-grid { grid-template-columns: 1fr; }
+      .insight-band-grid { grid-template-columns: 1fr; }
+      .kanban-grid { grid-template-columns: 1fr; }
+      .phase-header { align-items: flex-start; }
+      .phase-header-left { min-width: 0; flex-wrap: wrap; }
+      .phase-header-right { width: 100%; flex-wrap: wrap; }
+       .phase-progress-info { width: auto; max-width: 100%; flex: 1 1 180px; }
+       .phase-meta-bar { flex-wrap: wrap; gap: 6px; }
+       .distribution-badges { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; }
+      }
+
+    @media (max-width: 768px) {
+      .filter-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+      .filter-field:first-child, .filter-actions { grid-column: 1 / -1; }
+      .filter-actions { flex-wrap: wrap; justify-content: space-between; }
+      #filter-result-count { overflow-wrap: anywhere; white-space: normal; }
+    }
+
+    .dashboard-main-col,
+    .dashboard-side-col {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .overview-detail-stack { display: flex; flex-direction: column; gap: 16px; }
+    .overview-section-copy { color: var(--text-tertiary); font-size: 12px; max-width: 70ch; }
+    .overview-phase-list { display: flex; flex-direction: column; gap: 12px; }
+    .overview-phase-row, .overview-phase-card { background: var(--bg-surface-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 16px; display: flex; flex-direction: column; gap: 12px; transition: border-color 0.15s ease; }
+    .overview-phase-card:hover { border-color: var(--border-medium); }
+    .overview-phase-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+    .overview-phase-heading-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .overview-phase-heading-info strong { color: var(--text-primary); font-size: 14.5px; overflow-wrap: anywhere; }
+    .overview-phase-submeta { display: flex; flex-wrap: wrap; gap: 8px; color: var(--text-tertiary); font-size: 11.5px; }
+    .overview-phase-heading-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .overview-phase-pct-label { font: 700 13px var(--font-mono); color: var(--text-secondary); }
+    .overview-phase-tasks-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; margin-top: 4px; }
+    .overview-task-card { background: var(--bg-surface-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; border-left: 3px solid var(--border-subtle); }
+    .overview-task-card.status-completed { border-left-color: var(--accent-green); }
+    .overview-task-card.status-inprogress { border-left-color: var(--accent-blue); }
+    .overview-task-card.status-pending { border-left-color: var(--accent-amber); }
+    .overview-task-card.status-blocked { border-left-color: var(--accent-red); }
+    .overview-task-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .overview-task-id-title { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+    .overview-task-title { font-size: 12.5px; color: var(--text-primary); font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+    .overview-task-note { font-size: 11.5px; color: var(--text-secondary); line-height: 1.35; background: var(--bg-canvas); padding: 5px 8px; border-radius: var(--radius-sm); }
+    .overview-task-bottom { display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+    .overview-task-meta-left { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .overview-subtasks-pill { font: 11px var(--font-mono); color: var(--accent-purple); background: rgba(188, 140, 255, 0.1); padding: 2px 6px; border-radius: var(--radius-sm); border: 1px solid rgba(188, 140, 255, 0.25); }
+    .overview-phase-empty { color: var(--text-muted); font-size: 12px; font-style: italic; padding: 8px 0; }
+    .overview-phase-tasks { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 7px 12px; }
+    .overview-phase-tasks > span { display: flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 12px; min-width: 0; overflow-wrap: anywhere; }
+
+    /* Sub-tasks styles in Dedicated Phases tab */
+    .task-subtasks-box { background: var(--bg-canvas); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px; margin: 8px 0 4px 0; display: flex; flex-direction: column; gap: 8px; }
+    .task-subtasks-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .task-subtasks-title { font: 600 11.5px var(--font-mono); color: var(--text-secondary); }
+    .subtasks-mini-track { width: 80px; height: 4px; background: rgba(255, 255, 255, 0.1); border-radius: 2px; overflow: hidden; }
+    .subtasks-mini-bar { height: 100%; background: var(--accent-green); border-radius: 2px; transition: width 0.3s ease; }
+    .task-subtasks-list { display: flex; flex-direction: column; gap: 4px; }
+    .task-subtask-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); padding: 3px 0; }
+    .task-subtask-item.subtask-done { color: var(--text-muted); text-decoration: line-through; }
+    .task-subtask-item.subtask-done .subtask-icon { color: var(--accent-green); text-decoration: none; font-weight: bold; }
+    .task-subtask-item.subtask-inprogress .subtask-icon { color: var(--accent-blue); }
+    .task-subtask-item.subtask-blocked .subtask-icon { color: var(--accent-red); }
+    .task-subtask-item.subtask-pending .subtask-icon { color: var(--text-muted); }
+    .task-blocker-notice { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--accent-red); background: var(--color-blocked-bg); border: 1px solid rgba(248, 81, 73, 0.3); padding: 6px 10px; border-radius: var(--radius-sm); margin-top: 4px; }
+
+    /* Standard Panel Cards */
+    .panel-card {
+      background-color: var(--bg-surface-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-md);
+    }
+
+    .panel-header {
+      padding: 14px 18px;
+      background: var(--bg-surface-primary);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-title {
+      font-size: 14.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .metric-title-row { width: 100%; min-width: 0; justify-content: space-between; }
+    .distribution-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; min-width: 0; }
+
+    .panel-body { padding: 18px 20px; }
+
+    /* Badges & Pills */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 9px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.4;
+      white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border: 1px solid currentColor;
+      font-family: var(--font-mono);
+    }
+
+    .badge-tag {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-tertiary);
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 6px;
+      text-transform: none;
+      font-family: var(--font-mono);
+    }
+
+    .badge-completed { background: var(--color-completed-bg); border-color: var(--accent-green); color: var(--accent-green); }
+    .badge-inprogress { background: var(--color-inprogress-bg); border-color: var(--accent-blue); color: var(--accent-blue); }
+    .badge-pending { background: var(--color-pending-bg); border-color: var(--accent-amber); color: var(--accent-amber); }
+    .badge-blocked { background: var(--color-blocked-bg); border-color: var(--accent-red); color: var(--accent-red); }
+
+    .badge-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .badge-dot.completed { background-color: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
+    .badge-dot.inprogress { background-color: var(--accent-blue); box-shadow: 0 0 6px var(--accent-blue); animation: pulse 2s infinite; }
+    .badge-dot.pending { background-color: var(--accent-amber); }
+    .badge-dot.blocked { background-color: var(--accent-red); box-shadow: 0 0 6px var(--accent-red); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.9); }
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+      user-select: none;
+      white-space: nowrap;
+      text-decoration: none;
+      background: transparent;
+      color: var(--text-primary);
+    }
+
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn-secondary { background: var(--bg-surface-tertiary); border-color: var(--border-subtle); color: #c9d1d9; }
+    .btn-secondary:hover { background: var(--bg-surface-hover); border-color: var(--border-medium); color: #fff; }
+    .btn-secondary.active { background: #1f6feb; border-color: var(--accent-blue); color: #fff; }
+
+    /* Progress Tracks */
+    .progress-track {
+      width: 100%;
+      height: 8px;
+      background: var(--bg-surface-secondary);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-bar { height: 100%; border-radius: 4px; transition: width 0.35s ease; }
+    .progress-bar.completed { background: var(--accent-green); }
+    .progress-bar.inprogress { background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple)); }
+    .progress-bar.pending { background: var(--accent-amber); }
+    .progress-bar.blocked { background: var(--accent-red); }
+
+    /* Phases & Tasks */
+    .phases-container { display: flex; flex-direction: column; gap: 12px; }
+
+    .phase-card {
+      background: var(--bg-surface-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .phase-card:hover { border-color: var(--border-medium); }
+    .phase-card.active-phase { border-color: rgba(88, 166, 255, 0.4); box-shadow: var(--glow-blue); }
+
+    .phase-header {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.02);
+      padding: 14px 18px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+      user-select: none;
+      border: none;
+      text-align: left;
+      transition: background 0.15s ease;
+    }
+
+    .phase-header:hover { background: rgba(255, 255, 255, 0.05); }
+    .phase-header-left { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 240px; }
+    .phase-toggle-icon { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); transition: transform 0.2s ease; }
+    .phase-card.collapsed .phase-toggle-icon { transform: rotate(-90deg); }
+    .phase-number { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--text-tertiary); background: var(--bg-surface-secondary); border: 1px solid var(--border-subtle); padding: 2px 7px; border-radius: 4px; }
+    .phase-title-text { font-size: 14.5px; font-weight: 600; color: var(--text-primary); }
+    .phase-header-right { display: flex; align-items: center; gap: 14px; }
+    .phase-progress-info { display: flex; align-items: center; gap: 10px; width: 180px; }
+    .phase-progress-pct { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text-secondary); width: 36px; text-align: right; }
+
+    .phase-tasks-wrapper {
+      padding: 12px 18px 16px;
+      background: var(--bg-surface-primary);
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .phase-card.collapsed .phase-tasks-wrapper { display: none; }
+    .phase-meta-bar { padding-top: 4px; display: flex; justify-content: space-between; align-items: center; color: var(--text-tertiary); font-size: 12px; border-bottom: 1px dashed var(--border-subtle); padding-bottom: 10px; margin-bottom: 4px; }
+
+    .task-item {
+      background: var(--bg-surface-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: all 0.15s ease;
+      font-size: 13px;
+    }
+
+    .task-item:hover { border-color: var(--border-medium); background: var(--bg-surface-tertiary); }
+    .task-item.status-completed { border-left: 3px solid var(--accent-green); }
+    .task-item.status-inprogress { border-left: 3px solid var(--accent-blue); background: rgba(88, 166, 255, 0.03); }
+    .task-item.status-pending { border-left: 3px solid var(--accent-amber); }
+    .task-item.status-blocked { border-left: 3px solid var(--accent-red); background: rgba(248, 81, 73, 0.04); }
+
+    .task-main-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .task-checkbox-wrap { display: flex; align-items: center; gap: 10px; flex: 1; }
+
+    .custom-checkbox {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 17px;
+      height: 17px;
+      border: 1.5px solid var(--border-medium);
+      border-radius: 4px;
+      background: var(--bg-surface-secondary);
+      cursor: pointer;
+      display: grid;
+      place-content: center;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .custom-checkbox:hover { border-color: var(--border-focus); }
+    .custom-checkbox:checked { background: var(--color-completed); border-color: var(--accent-green); }
+    .custom-checkbox:checked::before { content: ""; width: 9px; height: 5px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg) translate(1px,-1px); }
+
+    .task-title { font-size: 13.5px; font-weight: 500; color: var(--text-primary); cursor: pointer; }
+    .task-item.status-completed .task-title { text-decoration: line-through; color: var(--text-tertiary); }
+    .task-id { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); margin-right: 4px; }
+    .task-badges { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .task-note { font-size: 12px; color: var(--text-secondary); padding-left: 27px; line-height: 1.4; }
+    .task-footer-row { display: flex; align-items: center; justify-content: space-between; padding-left: 27px; font-size: 11px; color: var(--text-tertiary); gap: 12px; flex-wrap: wrap; }
+    .task-owner-pill { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); color: var(--text-secondary); }
+
+    /* Todo & Help */
+    .todo-list { display: flex; flex-direction: column; gap: 8px; }
+    .todo-item {
+      background: var(--bg-surface-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      transition: all 0.15s ease;
+    }
+    .todo-item.done .todo-text { text-decoration: line-through; color: var(--text-tertiary); }
+    .todo-left { display: flex; align-items: center; gap: 10px; flex: 1; }
+    .todo-text { font-size: 13px; color: var(--text-primary); cursor: pointer; }
+    .informational-empty { color: var(--text-tertiary); font-size: 13px; padding: 18px; text-align: center; border: 1px dashed var(--border-medium); border-radius: var(--radius-sm); }
+
+    .help-panel {
+      background-color: var(--bg-surface-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      color: var(--text-secondary);
+    }
+
+
+    #tm-error-banner {
+      background: rgba(248, 81, 73, 0.12);
+      border: 1px solid var(--accent-red);
+      color: var(--accent-red);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+    #tm-error-banner[hidden] { display: none !important; }
+    #codegraph-dialog { color:var(--text-primary); background:var(--bg-surface-primary); border:1px solid var(--border-focus); border-radius:var(--radius-lg); width:min(960px,calc(100% - 32px)); max-width:none; max-height:min(820px,calc(100dvh - 32px)); margin:auto; padding:24px; box-shadow:var(--shadow-lg),0 0 50px rgba(88,166,255,.12); overflow:auto; }
+    #codegraph-dialog::backdrop { background:rgba(3,6,10,.82); }
+    #codegraph-dialog h2 { font-size: 26px; line-height: 1.2; margin-bottom: 4px; }
+    #codegraph-dialog-description { color: var(--text-tertiary); margin-bottom: 18px; }
+    .codegraph-dialog-stats, .tree-summary-grid, .git-summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:16px; }
+    .codegraph-dialog-stats > div, .tree-summary-grid > div, .git-summary-grid > div { background:var(--bg-surface-secondary); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:12px; display:flex; flex-direction:column; gap:3px; }
+    .codegraph-dialog-stats strong, .tree-summary-grid strong, .git-summary-grid strong { color:var(--text-primary); font:700 18px var(--font-mono); }
+    .codegraph-dialog-stats span, .tree-summary-grid span, .git-summary-grid span { color:var(--text-tertiary); font-size:11.5px; }
+    .codegraph-dialog-grid { display:grid; grid-template-columns:1.25fr 1fr; gap:18px; }
+    .codegraph-dialog-grid h3, .codegraph-details h3 { color:var(--text-primary); font-size:13px; margin-bottom:8px; }
+    .codegraph-relation-list { display:flex; flex-direction:column; gap:8px; list-style:none; }
+    .codegraph-relation-list li { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:8px; align-items:center; padding:10px; background:var(--bg-surface-secondary); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); }
+    .codegraph-relation-list small { grid-column:2 / -1; color:var(--text-tertiary); }
+    .codegraph-chip-list { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:14px; }
+    .codegraph-chip-list code { padding:5px 8px; background:var(--bg-surface-secondary); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); color:var(--accent-blue); overflow-wrap:anywhere; }
+    .codegraph-details { margin-top:18px; }
+    .codegraph-details pre { white-space:pre-wrap; overflow-wrap:anywhere; background:var(--bg-canvas); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:14px; color:var(--text-secondary); max-height:280px; overflow:auto; }
+    .codegraph-container { background:radial-gradient(ellipse at center, var(--bg-surface-tertiary) 0%, var(--bg-surface-secondary) 100%); border:1px solid var(--border-subtle); border-radius:var(--radius-lg); padding:20px; overflow:hidden; position:relative; }
+    .codegraph-summary { display:grid; grid-template-columns:auto auto minmax(240px,1fr); gap:12px; align-items:center; margin-bottom:12px; }
+    .codegraph-summary > div { display:flex; align-items:baseline; gap:6px; }
+    .codegraph-summary strong { color:var(--text-primary); font:700 20px var(--font-mono); }
+    .codegraph-summary span, .codegraph-summary p { color:var(--text-tertiary); font-size:11.5px; }
+    .codegraph-svg { overflow:visible; cursor:grab; user-select:none; }
+    .codegraph-svg:active { cursor:grabbing; }
+    .graph-edge { transition:stroke .2s ease, stroke-width .2s ease, stroke-opacity .2s ease; }
+    .graph-edge.active { stroke:var(--accent-purple); stroke-width:3px; stroke-opacity:1; filter:drop-shadow(0 0 6px var(--accent-purple)); }
+    .graph-edge-flow { stroke-dasharray:6, 6; animation:dashFlow 1s linear infinite; }
+    .graph-node { transition:transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1); cursor:pointer; }
+    .graph-node circle.node-bg { fill:var(--bg-surface-primary); stroke:var(--accent-blue); stroke-width:2.5px; transition:all .25s ease; filter:drop-shadow(0 4px 10px rgba(0,0,0,0.5)); }
+    .graph-node:hover circle.node-bg, .graph-node:focus-visible circle.node-bg { stroke:var(--accent-purple); stroke-width:3.5px; fill:var(--bg-surface-secondary); filter:drop-shadow(0 0 16px rgba(188,140,255,.55)); }
+    .graph-node circle.node-pulse { fill:none; stroke:var(--accent-blue); stroke-width:1.5px; opacity:0.4; animation:nodePulse 2.5s infinite ease-out; }
+    .graph-node:hover circle.node-pulse { stroke:var(--accent-purple); }
+    .graph-node text { pointer-events:none; }
+
+    @keyframes dashFlow {
+      to { stroke-dashoffset: -12; }
+    }
+    @keyframes nodePulse {
+      0% { r:46; opacity:0.6; }
+      100% { r:62; opacity:0; }
+    }
+    .tree-blueprint, .git-workbench { display:flex; flex-direction:column; gap:14px; }
+    .tree-view { font-family:var(--font-mono); font-size:12.5px; color:var(--text-secondary); line-height:1.75; background:var(--bg-canvas); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:16px; min-height:420px; max-height:640px; overflow:auto; }
+    .tree-node { display:grid; grid-template-columns:22px minmax(0,1fr) auto; align-items:center; gap:7px; min-height:30px; border-radius:5px; }
+    .tree-node:hover { background:var(--bg-surface-hover); }
+    .tree-node.dir { color:var(--text-primary); font-weight:600; }
+    .tree-glyph { color:var(--accent-blue); }
+    .tree-node.dir .tree-glyph { color:var(--accent-amber); }
+    .tree-type { color:var(--text-muted); font-size:9.5px; letter-spacing:.06em; }
+    .git-branch-banner { display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--bg-surface-secondary); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:14px; }
+    .git-branch-banner > div { display:flex; flex-direction:column; }
+    .git-branch-banner strong { color:var(--accent-blue); font:700 16px var(--font-mono); }
+    .git-label { color:var(--text-tertiary); font-size:10px; }
+    .git-kind-strip { display:flex; flex-wrap:wrap; gap:8px; }
+    .git-kind { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--border-subtle); border-radius:var(--radius-full); padding:3px 8px; color:var(--text-tertiary); font:10.5px var(--font-mono); background:var(--bg-surface-secondary); }
+    .git-timeline { display:flex; flex-direction:column; list-style:none; position:relative; }
+    .git-timeline::before { content:''; position:absolute; left:49px; top:20px; bottom:20px; width:1px; background:linear-gradient(var(--accent-purple),var(--border-subtle)); }
+    .git-event { display:grid; grid-template-columns:30px 22px minmax(0,1fr); gap:8px; align-items:start; position:relative; padding:7px 0; }
+    .git-event-index { color:var(--text-muted); font:10px var(--font-mono); padding-top:13px; }
+    .git-event-node { width:13px; height:13px; border-radius:50%; border:2px solid var(--accent-purple); background:var(--bg-canvas); margin-top:11px; z-index:1; box-shadow:0 0 8px rgba(188,140,255,.4); }
+    .git-event-card { background:var(--bg-surface-secondary); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:12px; min-width:0; }
+    .git-event-card > strong { color:var(--text-primary); display:block; margin-top:7px; overflow-wrap:anywhere; }
+    .git-event-top { display:flex; justify-content:space-between; gap:8px; align-items:center; }
+    .git-event-top code { color:var(--accent-purple); }
+    .help-portability-note { margin-top:14px; display:grid; grid-template-columns:32px minmax(0,1fr); gap:12px; background:var(--bg-surface-secondary); border:1px solid var(--border-medium); border-radius:var(--radius-md); padding:13px; max-width:760px; }
+    .help-portability-icon { width:28px; height:28px; border-radius:50%; display:grid; place-items:center; background:var(--color-inprogress-bg); color:var(--accent-blue); font:700 13px var(--font-mono); border:1px solid var(--accent-blue); }
+    .help-portability-note strong { color:var(--text-primary); }
+    .help-portability-note p { color:var(--text-tertiary); font-size:11.5px; margin:3px 0 8px; overflow-wrap:anywhere; }
+    .help-portability-tags { display:flex; flex-wrap:wrap; gap:6px; }
+    .help-portability-tags span { background:var(--bg-surface-tertiary); border:1px solid var(--border-subtle); border-radius:var(--radius-full); padding:3px 8px; color:var(--text-secondary); font-size:10.5px; }
+    #overview-detail-dialog { color:var(--text-primary); background:var(--bg-surface-primary); border:1px solid var(--border-focus); border-radius:var(--radius-lg); width:min(820px,calc(100% - 32px)); max-width:none; max-height:min(760px,calc(100dvh - 32px)); margin:auto; padding:24px; box-shadow:var(--shadow-lg),0 0 50px rgba(88,166,255,.14); overflow:auto; }
+    #overview-detail-dialog::backdrop { background:rgba(3,6,10,.82); }
+    .overview-detail-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; }
+    #overview-detail-title { font-size:24px; color:var(--text-primary); }
+    #overview-detail-value { color:var(--accent-blue); font:700 22px var(--font-mono); }
+    #overview-detail-summary { color:var(--text-secondary); max-width:68ch; margin-top:5px; }
+    #overview-detail-content { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; }
+    .overview-detail-section, .overview-detail-missing { background:var(--bg-surface-secondary); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:14px; }
+    .overview-detail-section h3, .overview-detail-missing h3 { color:var(--text-primary); font-size:13px; margin-bottom:8px; }
+    .overview-detail-section ul, .overview-detail-missing ul { display:flex; flex-direction:column; gap:6px; padding-left:18px; color:var(--text-secondary); }
+    .overview-detail-missing { border-color:rgba(210,153,34,.48); }
+    .overview-detail-missing p { color:var(--accent-amber); margin-bottom:8px; }
+    .overview-detail-actions { display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; margin-top:18px; }
+    .state-tools { margin-top:14px; }
+    .state-health-card { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:12px; align-items:center; background:var(--bg-surface-secondary); border:1px solid var(--border-medium); border-radius:var(--radius-md); padding:14px; }
+    .state-health-icon { width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font:700 14px var(--font-mono); }
+    .state-health-card[data-health="healthy"] .state-health-icon { color:var(--accent-green); background:var(--color-completed-bg); border:1px solid var(--accent-green); }
+    .state-health-card[data-health="warning"] .state-health-icon { color:var(--accent-amber); background:var(--color-pending-bg); border:1px solid var(--accent-amber); }
+    .state-health-card[data-health="error"] .state-health-icon { color:var(--accent-red); background:var(--color-blocked-bg); border:1px solid var(--accent-red); }
+    .state-health-card strong { color:var(--text-primary); display:block; }
+    .state-health-card p { color:var(--text-tertiary); font-size:12px; }
+    .state-health-counts { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+    .state-tools-advanced { margin-top:10px; background:var(--bg-surface-secondary); border:1px solid var(--border-subtle); border-radius:var(--radius-md); overflow:hidden; }
+    .state-tools-advanced summary { cursor:pointer; color:var(--text-primary); padding:12px 14px; font-weight:600; min-height:44px; display:flex; align-items:center; }
+    .state-tools-advanced[open] summary { border-bottom:1px solid var(--border-subtle); }
+    .state-tools-advanced-body { padding:14px; }
+    #tm-diagnostics { color:var(--text-secondary); margin-bottom:10px; }
+    #tm-diagnostics ul { padding-left:18px; }
+    #tm-state-json { max-height:360px; overflow:auto; white-space:pre; background:var(--bg-canvas); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); padding:12px; color:var(--text-secondary); font:12px/1.55 var(--font-mono); }
+    .state-tools-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; }
+
+    /* Welcome / Instructions Modal Dialog */
+    #welcome-dialog {
+      color: var(--text-primary);
+      background: var(--bg-surface-primary);
+      border: 2px solid var(--accent-red);
+      border-radius: var(--radius-lg);
+      width: min(840px, calc(100% - 32px));
+      max-width: none;
+      max-height: min(860px, calc(100dvh - 32px));
+      margin: auto;
+      padding: 0;
+      box-shadow: var(--shadow-lg), 0 0 50px rgba(248, 81, 73, 0.25);
+      overflow: hidden;
+    }
+    #welcome-dialog::backdrop {
+      background: rgba(3, 6, 10, 0.86);
+      backdrop-filter: blur(4px);
+    }
+    .welcome-dialog-container {
+      display: flex;
+      flex-direction: column;
+      max-height: min(860px, calc(100dvh - 32px));
+    }
+    .welcome-dialog-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 20px 24px;
+      background: linear-gradient(180deg, rgba(248,81,73,0.14) 0%, rgba(22,27,34,0.6) 100%);
+      border-bottom: 1px solid rgba(248, 81, 73, 0.28);
+    }
+    .welcome-badge-title {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .welcome-alert-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(248, 81, 73, 0.2);
+      color: #ff7b72;
+      border: 1px solid var(--accent-red);
+      border-radius: var(--radius-full);
+      padding: 4px 12px;
+      font: 800 13px var(--font-mono);
+      letter-spacing: 0.06em;
+      width: max-content;
+      box-shadow: 0 0 12px rgba(248, 81, 73, 0.3);
+    }
+    #welcome-dialog-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #ffffff;
+      margin: 0;
+      line-height: 1.3;
+    }
+    .welcome-close-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 16px;
+      width: 34px;
+      height: 34px;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+    .welcome-close-btn:hover {
+      background: rgba(248, 81, 73, 0.2);
+      color: #fff;
+      border-color: var(--accent-red);
+    }
+    .welcome-dialog-body {
+      padding: 20px 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .welcome-intro {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+    .welcome-steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
+    .welcome-step-item {
+      background: var(--bg-surface-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .welcome-step-number {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--accent-blue);
+      color: #0b0e14;
+      font: 700 12px var(--font-mono);
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .welcome-step-item strong {
+      font-size: 12.5px;
+      color: var(--text-primary);
+      display: block;
+      margin-bottom: 2px;
+    }
+    .welcome-step-item p {
+      font-size: 11.5px;
+      color: var(--text-tertiary);
+      line-height: 1.35;
+      margin: 0;
+    }
+    .welcome-prompt-box {
+      background: var(--bg-surface-secondary);
+      border: 1px solid rgba(63, 185, 80, 0.4);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .welcome-prompt-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent-green);
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .welcome-prompt-tag {
+      background: rgba(63, 185, 80, 0.15);
+      border: 1px solid var(--accent-green);
+      color: var(--accent-green);
+      font: 600 10px var(--font-mono);
+      padding: 2px 7px;
+      border-radius: var(--radius-full);
+      text-transform: uppercase;
+    }
+    .welcome-prompt-pre {
+      font: 11.5px/1.55 var(--font-mono);
+      color: #c9d1d9;
+      background: #0b0e14;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      max-height: 220px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      user-select: all;
+    }
+    .welcome-prompt-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .welcome-copy-feedback {
+      font-size: 12px;
+      color: var(--accent-green);
+      font-weight: 600;
+    }
+    .welcome-dialog-footer {
+      padding: 14px 24px;
+      background: var(--bg-surface-secondary);
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .welcome-footer-note {
+      font-size: 11.5px;
+      color: var(--text-tertiary);
+      max-width: 50ch;
+    }
+
+    /* Rich Detail Modals (Task, Todo, Git) */
+    #task-detail-dialog, #todo-detail-dialog, #git-detail-dialog {
+      color: var(--text-primary);
+      background: var(--bg-surface-primary);
+      border: 1px solid var(--border-focus);
+      border-radius: var(--radius-lg);
+      width: min(840px, calc(100% - 32px));
+      max-width: none;
+      max-height: min(860px, calc(100dvh - 32px));
+      margin: auto;
+      padding: 0;
+      box-shadow: var(--shadow-lg), 0 0 50px rgba(88, 166, 255, 0.16);
+      overflow: hidden;
+    }
+    #task-detail-dialog::backdrop, #todo-detail-dialog::backdrop, #git-detail-dialog::backdrop {
+      background: rgba(3, 6, 10, 0.86);
+      backdrop-filter: blur(4px);
+    }
+    .task-detail-container, .todo-detail-container, .git-detail-container {
+      display: flex;
+      flex-direction: column;
+      max-height: min(860px, calc(100dvh - 32px));
+    }
+    .task-detail-header, .todo-detail-header, .git-detail-header {
+      padding: 20px 24px 16px;
+      background: linear-gradient(180deg, var(--bg-surface-tertiary) 0%, var(--bg-surface-secondary) 100%);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    .task-detail-id-status, .todo-detail-id-status, .git-detail-id-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .task-id-badge {
+      font: 700 12px var(--font-mono);
+      background: rgba(88, 166, 255, 0.15);
+      border: 1px solid var(--accent-blue);
+      color: var(--accent-blue);
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+    }
+    .task-detail-header h2, .todo-detail-header h2, .git-detail-header h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.3;
+      margin: 0;
+    }
+    .task-detail-body, .todo-detail-body, .git-detail-body {
+      padding: 20px 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .task-detail-meta-grid, .todo-detail-meta-grid, .git-detail-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 10px;
+    }
+    .task-detail-meta-item, .todo-detail-meta-item, .git-detail-meta-item {
+      background: var(--bg-surface-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .task-detail-meta-label, .todo-detail-meta-label, .git-detail-meta-label {
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-tertiary);
+      font-weight: 600;
+    }
+    .task-detail-meta-item strong, .todo-detail-meta-item strong, .git-detail-meta-item strong {
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+    .task-detail-blocker {
+      background: rgba(248, 81, 73, 0.12);
+      border: 1px solid var(--accent-red);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      color: var(--accent-red);
+      font-size: 13px;
+    }
+    .task-detail-blocker strong { display: block; margin-bottom: 2px; }
+    .task-detail-section, .todo-detail-section, .git-detail-section {
+      background: var(--bg-surface-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .task-detail-section h3, .todo-detail-section h3, .git-detail-section h3 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0;
+    }
+    .task-detail-note-box, .git-detail-msg-box, .todo-detail-action-box {
+      font-size: 12.5px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: var(--bg-canvas);
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle);
+    }
+    .todo-detail-desc-text {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin: 0;
+    }
+    .task-detail-subtasks-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .task-detail-subtasks-count {
+      font: 700 11.5px var(--font-mono);
+      color: var(--accent-green);
+    }
+    .task-detail-subtasks-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .task-detail-subtask-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: var(--bg-canvas);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+    .task-detail-subtask-row.done {
+      border-color: rgba(63, 185, 80, 0.4);
+      background: rgba(63, 185, 80, 0.05);
+    }
+    .task-detail-subtask-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .task-detail-footer, .todo-detail-footer, .git-detail-footer {
+      padding: 14px 24px;
+      background: var(--bg-surface-secondary);
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .task-detail-footer-note, .todo-detail-footer-note, .git-detail-footer-note {
+      font-size: 11.5px;
+      color: var(--text-tertiary);
+    }
+    .todo-item[role="button"], .task-item[role="button"], .git-event-card[role="button"], .overview-task-card[role="button"], .kanban-task-card[role="button"] {
+      cursor: pointer;
+      transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+    }
+    .todo-item[role="button"]:hover, .task-item[role="button"]:hover, .git-event-card[role="button"]:hover, .overview-task-card[role="button"]:hover, .kanban-task-card[role="button"]:hover {
+      border-color: var(--border-focus);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+    .todo-item[role="button"]:focus-visible, .task-item[role="button"]:focus-visible, .git-event-card[role="button"]:focus-visible, .overview-task-card[role="button"]:focus-visible, .kanban-task-card[role="button"]:focus-visible {
+      outline: 2px solid var(--border-focus);
+      outline-offset: 2px;
+      border-color: var(--border-focus);
+    }
+
+    /* Dedicated View Containers */
+    .view-container { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+    .view-container[hidden] { display: none !important; }
+
+    /* Kanban Board Layout */
+    .kanban-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      align-items: start;
+    }
+
+    .kanban-column {
+      background: var(--bg-surface-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 480px;
+    }
+    .kanban-column-compact { min-height:300px; }
+    .kanban-column-title { display:flex; align-items:center; gap:6px; color:var(--text-primary); }
+    .kanban-empty { color:var(--text-muted); font-size:12px; text-align:center; padding:24px 8px; }
+    .kanban-task-meta, .kanban-task-footer { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+    .kanban-task-title { font-size:13px; font-weight:600; color:var(--text-primary); line-height:1.35; overflow-wrap:anywhere; }
+    .kanban-task-note { font-size:11.5px; color:var(--text-secondary); line-height:1.4; padding:7px 9px; background:var(--bg-canvas); border-radius:var(--radius-sm); }
+    .kanban-task-footer { color:var(--text-tertiary); font-size:11px; }
+
+    .kanban-column-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-weight: 600;
+      font-size: 13px;
+      background: var(--bg-surface-secondary);
+    }
+
+    .kanban-cards-list {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+      overflow-y: auto;
+      max-height: calc(100vh - 300px);
+    }
+
+    /* Final mobile containment must follow the shared badge defaults. */
+    @media (max-width: 720px) {
+      .metric-title-row { display: grid; grid-template-columns: 1fr; align-items: start; gap: 6px; min-width: 0; }
+      .metric-title-row .badge { width: max-content; max-width: 100%; white-space: normal; justify-self: start; }
+      .distribution-badges { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; }
+      .distribution-badges .badge { width: 100%; min-width: 0; justify-content: center; white-space: normal; }
+      .distribution-risk-warning { width: 100%; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+      .overview-phase-heading { grid-template-columns:1fr; }
+      .codegraph-dialog-grid { grid-template-columns:1fr; }
+      .codegraph-summary { grid-template-columns:1fr 1fr; }
+      .codegraph-summary p { grid-column:1 / -1; }
+      #codegraph-dialog { width:calc(100% - 16px); padding:16px; max-height:calc(100dvh - 16px); }
+      #overview-detail-dialog { width:calc(100% - 16px); padding:16px; max-height:calc(100dvh - 16px); }
+      #welcome-dialog { width:calc(100% - 16px); padding:0; max-height:calc(100dvh - 16px); }
+      .overview-detail-heading, .state-health-card { grid-template-columns:1fr; display:grid; }
+      .state-health-counts { justify-content:flex-start; }
+      .git-summary-grid, .tree-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .task-main-row, .task-badges, .task-footer-row { flex-wrap: wrap; min-width: 0; }
+      .task-badges { flex-shrink: 1; }
+      .badge, .badge-tag { white-space: normal; overflow-wrap: anywhere; }
+      .custom-checkbox { pointer-events: none; }
+    }
+  </style>
+</head>
+<body>
+  <!-- AI-EDITABLE: STATE — single source of truth, AI edits only this block -->
+  <!-- AI-EDITABLE: STATE -->
+  <script type="application/json" id="tm-state">{"schemaVersion":"1.0","meta":{"projectName":"Drop-In Demo","version":"0.1.0","branch":"main","commit":"abc1234","syncStatus":"synced","labels":{"es":{"overallProgress":"Progreso Global","filterAll":"Todas","filterActive":"Activas","todoTitle":"Tareas Rápidas","helpTitle":"Ayuda"}},"features":{"git":false,"tree":false,"codegraph":false,"help":true}},"phases":[],"todos":[],"git":{"branch":"","commits":[],"syncStatus":""},"tree":[],"codegraph":{"nodes":[],"edges":[]}}</script>
+
+  <div class="app-container" id="dashboard-root">
+    <!-- AI-EDITABLE: HEADER -->
+    <header class="header-panel" id="project-header-panel">
+      <div class="header-brand">
+        <div class="header-icon" id="project-logo-icon" title="Task Manager Cockpit">
+          <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 18 18"><defs><linearGradient id="b64029dc-53b6-43b2-8aae-92413846e51c" y1="9" x2="18" y2="9" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#5ea0ef" /><stop offset="1" stop-color="#0078d4" /></linearGradient><linearGradient id="bfc54d5e-2678-40a3-87f5-a3381ba974de" x1="3.092" y1="8.98" x2="14.9" y2="8.98" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#50e6ff" /><stop offset="1" stop-color="#32bedd" /></linearGradient><linearGradient id="b1aeb350-670b-47cd-881a-82e451a61e61" x1="3.154" y1="6.215" x2="10.922" y2="6.215" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#5ea0ef" /><stop offset="0.432" stop-color="#3890e4" /><stop offset="1" stop-color="#0078d4" /></linearGradient></defs><g id="a8e49afa-0212-415e-a59c-566b1a954500"><path d="M9.276,0A8.957,8.957,0,0,0,3.968,1.54a.6.6,0,0,0-.138.873l.788.993A7.1,7.1,0,1,1,2.084,7.359a.6.6,0,0,0-.412-.707l-.657-.2a.6.6,0,0,0-.763.434A9,9,0,1,0,9.276,0Z" fill="url(#b64029dc-53b6-43b2-8aae-92413846e51c)" /><circle cx="13.69" cy="7.663" r="1.437" fill="#f78d1e" /><circle cx="7.896" cy="13.799" r="1.437" fill="#f78d1e" /><path d="M6.125,6.191,4.993,4.659a5.9,5.9,0,0,1,8.859.983c-.054,0-.106-.016-.162-.016a2.027,2.027,0,0,0-1.617.812,3.984,3.984,0,0,0-5.948-.247ZM5.859,13.8a2.027,2.027,0,0,1,.761-1.575A4,4,0,0,1,5.022,9.6a4.043,4.043,0,0,1,.024-1.338.6.6,0,0,0-.409-.689l-.66-.205a.6.6,0,0,0-.766.448A5.876,5.876,0,0,0,5.879,14C5.873,13.93,5.859,13.866,5.859,13.8ZM13.69,9.7a2.01,2.01,0,0,1-.721-.138,4.016,4.016,0,0,1-3.233,3.376,1.987,1.987,0,0,1-.114,1.93A5.9,5.9,0,0,0,14.9,9.293,2.025,2.025,0,0,1,13.69,9.7Z" fill="url(#bfc54d5e-2678-40a3-87f5-a3381ba974de)" /><path d="M9.253,7.094a1.929,1.929,0,0,0-.834.074L3.973,1.507l-.59.463a.6.6,0,0,0-.1.843L7.359,8A1.909,1.909,0,0,0,7.1,9.26,1.923,1.923,0,1,0,9.253,7.094Z" fill="url(#b1aeb350-670b-47cd-881a-82e451a61e61)" /></g></svg>
+        </div>
+        <div class="header-titles">
+          <h1 id="project-title"><span>Drop-In Task Manager</span> <span class="badge">v0.1.0</span></h1>
+          <p id="project-subtitle">Obsidian Technical Cockpit — sincronizado con orquestador IA</p>
+        </div>
+      </div>
+      <div class="header-center-hub" id="header-cockpit-hub">
+        <div class="digital-clock-card" id="tm-digital-clock" role="timer" aria-label="Reloj digital en vivo" data-clock-format="12h">
+          <div class="clock-display-row">
+            <div class="clock-digits-group" aria-live="off">
+              <span class="clock-digit clock-hours" id="clock-hours">12</span>
+              <span class="clock-separator" id="clock-colon-1">:</span>
+              <span class="clock-digit clock-minutes" id="clock-minutes">00</span>
+              <span class="clock-separator clock-sec-sep" id="clock-colon-2">:</span>
+              <span class="clock-digit clock-seconds" id="clock-seconds">00</span>
+            </div>
+            <div class="clock-period-group">
+              <span class="clock-period" id="clock-period" aria-label="Período horario">AM</span>
+            </div>
+            <div class="clock-actions">
+              <button type="button" class="clock-toggle-btn" id="btn-clock-toggle-format" title="Alternar formato 12h / 24h" aria-label="Alternar formato de reloj 12 horas o 24 horas">
+                <span class="clock-toggle-icon" aria-hidden="true">⋮</span>
+                <span class="clock-format-tag" id="clock-format-tag">12H</span>
+              </button>
+            </div>
+          </div>
+          <div class="clock-meta-row">
+            <span class="clock-date-text" id="clock-date">Cargando fecha...</span>
+            <span class="clock-tz-badge" id="clock-timezone" title="Zona horaria local del sistema">LOCAL</span>
+          </div>
+        </div>
+
+        <div class="last-update-card" id="tm-last-update" role="status" aria-label="Información de última actualización del HTML">
+          <div class="last-update-status-row">
+            <span class="update-pulse-dot" aria-hidden="true"></span>
+            <span class="last-update-label">Última act. HTML</span>
+          </div>
+          <div class="last-update-time" id="last-update-relative">Recientemente</div>
+          <div class="last-update-subtext" id="last-update-exact">Sincronizado</div>
+        </div>
+
+        <div class="harness-card" id="tm-harness-card" role="status" aria-label="AI Harness Activo">
+          <div class="harness-status-row">
+            <span class="harness-pulse-dot" aria-hidden="true"></span>
+            <span class="harness-label">HARNESS ACTIVO</span>
+          </div>
+          <div class="harness-title-row">
+            <span class="harness-icon-wrap" id="harness-icon" aria-hidden="true">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            </span>
+            <span class="harness-name" id="harness-name">OpenCode</span>
+          </div>
+          <div class="harness-subtext" id="harness-role">Autonomous Multi-Agent</div>
+        </div>
+      </div>
+      <div class="header-meta">
+        <span class="badge"><span class="badge-dot inprogress"></span> main · abc1234</span>
+        <span class="badge"><span class="badge-dot completed"></span> Sincronizado</span>
+        <button class="btn btn-secondary btn-sm" id="btn-expand-all" title="Expandir/colapsar todas las fases">Expandir fases</button>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs Bar (Interactive View Switcher) -->
+    <nav class="nav-tabs-bar" id="main-nav-tabs">
+      <div class="tab-group" role="tablist">
+        <button class="tab-btn active" id="tab-btn-overview" data-target-view="view-overview" role="tab" aria-selected="true">
+          <span class="tab-icon">📊</span> Resumen / HUD
+        </button>
+        <button class="tab-btn" id="tab-btn-phases" data-target-view="view-phases" role="tab" aria-selected="false">
+          <span class="tab-icon">📋</span> Fases & Tareas
+        </button>
+        <button class="tab-btn" id="tab-btn-kanban" data-target-view="view-kanban" role="tab" aria-selected="false">
+          <span class="tab-icon">📌</span> Tablero Kanban
+        </button>
+        <button class="tab-btn" id="tab-btn-codegraph" data-target-view="view-codegraph" role="tab" aria-selected="false">
+          <span class="tab-icon">🕸️</span> Codegraph
+        </button>
+        <button class="tab-btn" id="tab-btn-tree" data-target-view="view-tree" role="tab" aria-selected="false">
+          <span class="tab-icon">📁</span> Árbol Archivos
+        </button>
+        <button class="tab-btn" id="tab-btn-git" data-target-view="view-git" role="tab" aria-selected="false">
+          <span class="tab-icon">🌿</span> Git Stream
+        </button>
+        <button class="tab-btn" id="tab-btn-help" data-target-view="view-help" role="tab" aria-selected="false">
+          <span class="tab-icon">⚡</span> Consola IA
+        </button>
+      </div>
+      <div class="nav-controls">
+        <div class="search-box">
+          <span>🔍</span>
+          <input type="text" id="global-search-input" placeholder="Filtrar tareas, tags, commits..." autocomplete="off" />
+        </div>
+      </div>
+    </nav>
+
+    <!-- Error banner hidden by default -->
+    <div id="tm-error-banner" hidden data-error-banner style="display:none;">Error banner placeholder</div>
+    <dialog id="codegraph-dialog" aria-labelledby="codegraph-dialog-title" aria-describedby="codegraph-dialog-description"><h2 id="codegraph-dialog-title"></h2><p id="codegraph-dialog-description"></p><div id="codegraph-dialog-content"></div><button type="button" class="btn btn-secondary" data-codegraph-close>Cerrar</button></dialog>
+    <dialog id="overview-detail-dialog" aria-labelledby="overview-detail-title" aria-describedby="overview-detail-summary"><div class="overview-detail-heading"><div><h2 id="overview-detail-title"></h2><div id="overview-detail-value"></div><p id="overview-detail-summary"></p></div><button type="button" class="btn btn-secondary" data-overview-close>Cerrar</button></div><div id="overview-detail-content"></div><div class="overview-detail-actions"><button type="button" class="btn btn-secondary" data-overview-view-section hidden>Ver sección</button></div></dialog>
+    <dialog id="welcome-dialog" aria-labelledby="welcome-dialog-title" aria-describedby="welcome-dialog-desc">
+      <div class="welcome-dialog-container">
+        <div class="welcome-dialog-header">
+          <div class="welcome-badge-title">
+            <span class="welcome-alert-badge">⚠️ ¡ATENCIÓN! — LEER ANTES DE EMPEZAR</span>
+            <h2 id="welcome-dialog-title">Activación Autónoma del Gestor de Tareas</h2>
+          </div>
+          <button type="button" class="welcome-close-btn" data-welcome-close aria-label="Cerrar ventana emergente">✕</button>
+        </div>
+        <div class="welcome-dialog-body">
+          <p class="welcome-intro" id="welcome-dialog-desc">
+            Este archivo es 100% portable y autónomo. Para que tu IA mantenga actualizado este dashboard en tiempo real sin interrumpirte con preguntas, copia el prompt maestro optimizado a continuación y pégaselo al inicio de tu sesión.
+          </p>
+          <div class="welcome-steps-grid">
+            <div class="welcome-step-item">
+              <div class="welcome-step-number">1</div>
+              <div>
+                <strong>Copia el Prompt</strong>
+                <p>Usa el botón verde para copiar el prompt oficial al portapapeles.</p>
+              </div>
+            </div>
+            <div class="welcome-step-item">
+              <div class="welcome-step-number">2</div>
+              <div>
+                <strong>Pégalo en tu IA</strong>
+                <p>Envíalo a Claude Code, OpenCode, Cursor o ChatGPT en la raíz de tu proyecto.</p>
+              </div>
+            </div>
+            <div class="welcome-step-item">
+              <div class="welcome-step-number">3</div>
+              <div>
+                <strong>100% Autónomo</strong>
+                <p>La IA autodescubre el proyecto, crea fases/subtareas y actualiza el HTML.</p>
+              </div>
+            </div>
+          </div>
+          <div class="welcome-prompt-box">
+            <div class="welcome-prompt-header">
+              <span>📋 Prompt Maestro para la IA</span>
+              <span class="welcome-prompt-tag">Autónomo + Subagente</span>
+            </div>
+            <pre class="welcome-prompt-pre" id="welcome-prompt-text" data-welcome-prompt></pre>
+            <div class="welcome-prompt-actions">
+              <button type="button" class="btn btn-secondary" style="background:#238636;border-color:#3fb950;color:#fff;" id="btn-copy-welcome-prompt" data-copy-welcome-prompt>📋 Copiar Prompt Maestro</button>
+              <span class="welcome-copy-feedback" id="welcome-copy-feedback" data-copy-welcome-feedback role="status" aria-live="polite" style="display:none;"></span>
+            </div>
+          </div>
+        </div>
+        <div class="welcome-dialog-footer">
+          <span class="welcome-footer-note">💡 Puedes consultar o volver a copiar este prompt en cualquier momento desde la pestaña <strong>Consola IA</strong>.</span>
+          <button type="button" class="btn btn-secondary" data-welcome-close>Entendido, comenzar</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Task Detail Modal Dialog -->
+    <dialog id="task-detail-dialog" aria-labelledby="task-detail-title" aria-describedby="task-detail-note">
+      <div class="task-detail-container">
+        <div class="task-detail-header">
+          <div class="task-detail-badge-title">
+            <div class="task-detail-id-status">
+              <span class="task-id-badge" id="task-detail-id">T1-01</span>
+              <span class="badge" id="task-detail-status-badge"><span class="badge-dot" id="task-detail-status-dot"></span> <span id="task-detail-status-text">Completado</span></span>
+              <span class="badge badge-tag" id="task-detail-phase-badge">Fase 1</span>
+            </div>
+            <h2 id="task-detail-title">Título de la Tarea</h2>
+          </div>
+          <button type="button" class="welcome-close-btn" data-task-close aria-label="Cerrar detalles de tarea">✕</button>
+        </div>
+        <div class="task-detail-body">
+          <div class="task-detail-meta-grid">
+            <div class="task-detail-meta-item">
+              <span class="task-detail-meta-label">Responsable SDD</span>
+              <strong id="task-detail-owner">sdd-apply</strong>
+            </div>
+            <div class="task-detail-meta-item">
+              <span class="task-detail-meta-label">Etiqueta / Dominio</span>
+              <strong id="task-detail-tag">Backend</strong>
+            </div>
+            <div class="task-detail-meta-item">
+              <span class="task-detail-meta-label">Commit Vinculado</span>
+              <code id="task-detail-commit">—</code>
+            </div>
+            <div class="task-detail-meta-item">
+              <span class="task-detail-meta-label">Objetivo / Sprint</span>
+              <strong id="task-detail-target">—</strong>
+            </div>
+          </div>
+          <div id="task-detail-blocker-box" class="task-detail-blocker" style="display:none;">
+            <strong>⚠️ Bloqueo Reportado:</strong>
+            <p id="task-detail-blocker-text"></p>
+          </div>
+          <div class="task-detail-section">
+            <h3>📝 Descripción y Notas Técnicas</h3>
+            <div class="task-detail-note-box" id="task-detail-note">Sin notas técnicas adicionales.</div>
+          </div>
+          <div class="task-detail-section" id="task-detail-subtasks-section">
+            <div class="task-detail-subtasks-header">
+              <h3>⚡ Desglose de Sub-tareas</h3>
+              <span class="task-detail-subtasks-count" id="task-detail-subtasks-count">0 / 0 completadas</span>
+            </div>
+            <div class="task-detail-subtasks-list" id="task-detail-subtasks-list"></div>
+          </div>
+        </div>
+        <div class="task-detail-footer">
+          <span class="task-detail-footer-note">Información sincronizada con el estado inmutable <code>#tm-state</code>.</span>
+          <button type="button" class="btn btn-secondary" data-task-close>Cerrar</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Todo / Señal de Atención Modal Dialog -->
+    <dialog id="todo-detail-dialog" aria-labelledby="todo-detail-title" aria-describedby="todo-detail-desc">
+      <div class="todo-detail-container">
+        <div class="todo-detail-header">
+          <div class="todo-detail-badge-title">
+            <div class="todo-detail-id-status">
+              <span class="task-id-badge" id="todo-detail-id">td-1</span>
+              <span class="badge" id="todo-detail-priority-badge">P0 Urgente</span>
+              <span class="badge badge-tag" id="todo-detail-status-badge">Completada</span>
+            </div>
+            <h2 id="todo-detail-title">Señal de Atención</h2>
+          </div>
+          <button type="button" class="welcome-close-btn" data-todo-close aria-label="Cerrar señal de atención">✕</button>
+        </div>
+        <div class="todo-detail-body">
+          <div class="todo-detail-section">
+            <h3>🎯 ¿Qué es esta Señal de Atención?</h3>
+            <p id="todo-detail-desc" class="todo-detail-desc-text">
+              Las Señales de Atención son alertas tempranas, recordatorios operativos e invariantes técnicas que el orquestador IA y los subagentes deben monitorear y respetar durante el desarrollo sin ejecutar acciones destructivas no autorizadas.
+            </p>
+          </div>
+          <div class="todo-detail-meta-grid">
+            <div class="todo-detail-meta-item">
+              <span class="todo-detail-meta-label">Nivel de Prioridad</span>
+              <strong id="todo-detail-p-level">P0 (Bloqueante / Crítico)</strong>
+            </div>
+            <div class="todo-detail-meta-item">
+              <span class="todo-detail-meta-label">Destinatario</span>
+              <strong>Orquestador IA & Subagentes</strong>
+            </div>
+            <div class="todo-detail-meta-item">
+              <span class="todo-detail-meta-label">Estado de Verificación</span>
+              <strong id="todo-detail-state-text">Completada / Verificada</strong>
+            </div>
+          </div>
+          <div class="todo-detail-section">
+            <h3>💡 Recomendación de Acción para la IA</h3>
+            <div class="todo-detail-action-box" id="todo-detail-action-guidance">
+              Verifica que los contratos, pruebas y requerimientos asociados a esta señal se encuentren íntegros antes de reportar la tarea como finalizada.
+            </div>
+          </div>
+        </div>
+        <div class="todo-detail-footer">
+          <span class="todo-detail-footer-note">Este panel es un monitor informativo; no emite mutaciones automáticas.</span>
+          <button type="button" class="btn btn-secondary" data-todo-close>Cerrar</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Git Commit Detail Modal Dialog -->
+    <dialog id="git-detail-dialog" aria-labelledby="git-detail-title" aria-describedby="git-detail-msg">
+      <div class="git-detail-container">
+        <div class="git-detail-header">
+          <div class="git-detail-badge-title">
+            <div class="git-detail-id-status">
+              <span class="task-id-badge" id="git-detail-hash">abc1234</span>
+              <span class="git-kind" id="git-detail-kind">feat</span>
+              <span class="badge" style="color:var(--accent-green);border-color:rgba(63,185,80,0.3);"><span class="badge-dot completed"></span> Sincronizado</span>
+            </div>
+            <h2 id="git-detail-title">Detalle del Commit Git</h2>
+          </div>
+          <button type="button" class="welcome-close-btn" data-git-close aria-label="Cerrar detalle de commit">✕</button>
+        </div>
+        <div class="git-detail-body">
+          <div class="git-detail-section">
+            <h3>🌿 Mensaje de Commit</h3>
+            <div class="git-detail-msg-box" id="git-detail-msg">feat: esqueleto base + tokens</div>
+          </div>
+          <div class="git-detail-meta-grid">
+            <div class="git-detail-meta-item">
+              <span class="git-detail-meta-label">Rama Asociada</span>
+              <strong id="git-detail-branch">main</strong>
+            </div>
+            <div class="git-detail-meta-item">
+              <span class="git-detail-meta-label">Hash Completo</span>
+              <code id="git-detail-full-hash">abc1234567890</code>
+            </div>
+            <div class="git-detail-meta-item">
+              <span class="git-detail-meta-label">Estado de Sincronización</span>
+              <span id="git-detail-sync">Sincronizado</span>
+            </div>
+          </div>
+        </div>
+        <div class="git-detail-footer">
+          <span class="git-detail-footer-note">Lectura offline directa del árbol git registrado en <code>#tm-state</code>.</span>
+          <button type="button" class="btn btn-secondary" data-git-close>Cerrar</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Tab View: Overview (Integrated dual column) -->
+    <div id="view-overview" class="view-container">
+      <!-- AI-EDITABLE: HUD -->
+      <section class="metrics-grid" id="metrics-overview">
+        <div class="metric-card accent-blue" id="metric-overall-card">
+          <div class="panel-title"><span>Progreso Global</span><span class="badge">Pendiente</span></div>
+          <div style="font-size:24px;font-weight:700;color:#fff;" id="overall-progress-num">—%</div>
+          <div class="progress-track"><div id="overall-progress-bar" class="progress-bar inprogress" style="width:0%;"></div></div>
+          <div style="font-size:12px;color:#8b949e;"><span id="stat-completed-count">0</span> de <span id="stat-total-count">0</span> tareas completadas</div>
+        </div>
+        <div class="metric-card accent-purple" id="metric-current-focus">
+          <div class="panel-title">Fase Actual</div>
+          <div style="font-size:18px;color:#fff;margin-top:4px;" id="current-focus-title">Sin fase</div>
+        </div>
+        <div class="metric-card accent-green" id="metric-distribution">
+          <div class="panel-title">Distribución</div>
+          <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
+            <span class="badge badge-completed"><span class="badge-dot completed"></span> 0 Hechas</span>
+            <span class="badge badge-inprogress"><span class="badge-dot inprogress"></span> 0 Activas</span>
+            <span class="badge badge-pending"><span class="badge-dot pending"></span> 0 Pendientes</span>
+            <span class="badge badge-blocked"><span class="badge-dot blocked"></span> 0 Bloqueadas</span>
+          </div>
+        </div>
+        <div class="metric-card accent-amber" id="metric-git">
+          <div class="panel-title">Git</div>
+          <div style="font-size:13px;color:#fff;font-family:var(--font-mono);">branch: —</div>
+        </div>
+      </section>
+
+      <main class="dashboard-layout">
+        <div class="dashboard-main-col">
+          <section class="panel-card" id="todo-scratchpad-panel">
+            <div class="panel-header"><div><div class="panel-title"><span>Señales de Atención</span></div><p class="overview-section-copy">Prioridades y recordatorios informativos. Este panel no ejecuta acciones ni envía comandos.</p></div><span class="badge" id="todo-count-badge">0 señales</span></div>
+            <div class="panel-body"><div class="todo-list" id="todo-items-container"><div class="informational-empty">Sin señales de atención registradas</div></div></div>
+          </section>
+        </div>
+        <aside class="dashboard-side-col"><section class="panel-card"><div class="panel-header"><div class="panel-title">Lectura del HUB</div></div><div class="panel-body">El resumen consolida señales, Kanban y fases sin ejecutar acciones. Las pestañas mantienen sus vistas especializadas.</div></section></aside>
+      </main>
+      <div class="overview-detail-stack">
+        <section class="panel-card" id="overview-kanban-section"><div class="panel-header"><div><div class="panel-title"><span>Tablero Kanban por Estado</span></div><p class="overview-section-copy">Vista informativa completa; la pestaña Kanban conserva su vista dedicada.</p></div></div><div class="panel-body"><div class="kanban-grid" id="overview-kanban-mount"></div></div></section>
+        <section class="panel-card" id="overview-phases-section"><div class="panel-header"><div><div class="panel-title"><span>Fases del Proyecto</span></div><p class="overview-section-copy">Desglose de fases y tareas para lectura rápida; los filtros permanecen en la pestaña Fases.</p></div></div><div class="panel-body"><div class="overview-phase-list" id="overview-phases-mount"></div></div></section>
+      </div>
+    </div>
+
+    <!-- Dedicated Full Views (for individual Tab Navigation) -->
+    <div id="view-phases" class="view-container" hidden>
+      <div id="full-phases-mount"><section class="panel-card" id="phases-panel"><div class="panel-header"><div class="panel-title"><span>📋 Fases del Proyecto</span></div><div style="display:flex;gap:8px;"><button class="btn btn-secondary btn-sm" id="btn-filter-all">Todas</button><button class="btn btn-secondary btn-sm" id="btn-filter-active">Activas</button></div></div><form class="filter-toolbar" id="task-filter-form" aria-label="Filtros de tareas" onsubmit="return false;"><div class="filter-field"><label for="task-filter-text">Texto</label><input type="search" id="task-filter-text" placeholder="Título, nota o ID" autocomplete="off"></div><div class="filter-field"><label for="task-filter-status">Estado</label><select id="task-filter-status"><option value="all">Todos</option><option value="active">Activas</option><option value="completed">Completadas</option><option value="in-progress">En curso</option><option value="pending">Pendientes</option><option value="blocked">Bloqueadas</option></select></div><div class="filter-field"><label for="task-filter-owner">Responsable</label><select id="task-filter-owner"><option value="">Todos</option></select></div><div class="filter-field"><label for="task-filter-tag">Etiqueta</label><select id="task-filter-tag"><option value="">Todos</option></select></div><div class="filter-field"><label for="task-filter-phase">Fase</label><select id="task-filter-phase"><option value="">Todos</option></select></div><div class="filter-actions"><button type="button" class="btn btn-secondary btn-sm" id="task-filter-reset">Restablecer</button><span id="filter-result-count" aria-live="polite">0 / 0 visibles</span></div></form><div class="panel-body"><div id="filter-empty-state" role="status" hidden>No se encontraron tareas coincidentes</div><div class="phases-container" id="phases-list"></div></div></section></div>
+    </div>
+
+    <div id="view-kanban" class="view-container" hidden>
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-title"><span>📌 Tablero Kanban por Estado</span></div>
+          <div style="font-size:12px;color:var(--text-tertiary);" id="kanban-total-counter">0 tareas en flujo</div>
+        </div>
+        <div class="panel-body" id="full-kanban-mount">
+          <div class="kanban-grid" id="kanban-board-mount">
+            <!-- Rendered by TMPhases -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-git" class="view-container" hidden>
+      <div id="full-git-mount"><section class="panel-card" id="git-details-panel"><div class="panel-body"></div></section></div>
+    </div>
+
+    <div id="view-codegraph" class="view-container" hidden>
+      <div id="full-codegraph-mount"><section class="panel-card" id="codegraph-panel"><div class="panel-body"></div></section></div>
+    </div>
+
+    <div id="view-tree" class="view-container" hidden>
+      <div id="full-tree-mount"><section class="panel-card" id="project-structure-panel"><div class="panel-body"></div></section></div>
+    </div>
+
+    <div id="view-help" class="view-container" hidden>
+      <div id="full-help-mount"><section id="help-panel" class="help-panel" data-help></section></div>
+    </div>
+  </div>
+</body>
+</html>

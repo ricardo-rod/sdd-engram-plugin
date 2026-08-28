@@ -7,6 +7,10 @@ import {
   isSddFallbackAgent,
   isPrimarySddAgent,
   isFallbackEligibleSddAgent,
+  isEditablePrimaryAgent,
+  isCatalogVisibleAgent,
+  isPersistibleAgentKey,
+  isRuntimeSyncEligibleAgent,
   resolveModelInfo,
   parseActiveProfileFromRaw,
   resolveSessionActiveModel,
@@ -81,6 +85,7 @@ describe('utils logic', () => {
       expect(isManagedSddAgent('review-risk')).toBe(true);
       expect(isManagedSddAgent('jd-judge-a')).toBe(true);
       expect(isManagedSddAgent('gentle-orchestrator')).toBe(true);
+      expect(isManagedSddAgent('model-audit')).toBe(true);
       expect(isManagedSddAgent('other-test')).toBe(false);
     });
 
@@ -89,6 +94,7 @@ describe('utils logic', () => {
       expect(isSddFallbackAgent('review-risk-fallback')).toBe(true);
       expect(isSddFallbackAgent('jd-judge-a-fallback')).toBe(true);
       expect(isSddFallbackAgent('sdd-test')).toBe(false);
+      expect(isSddFallbackAgent('model-audit')).toBe(false);
       expect(isSddFallbackAgent('other-fallback')).toBe(false);
     });
 
@@ -97,6 +103,7 @@ describe('utils logic', () => {
       expect(isPrimarySddAgent('review-risk')).toBe(true);
       expect(isPrimarySddAgent('jd-judge-a')).toBe(true);
       expect(isPrimarySddAgent('gentle-orchestrator')).toBe(true);
+      expect(isPrimarySddAgent('model-audit')).toBe(true);
       expect(isPrimarySddAgent('sdd-test-fallback')).toBe(false);
       expect(isPrimarySddAgent('other-test')).toBe(false);
     });
@@ -107,9 +114,32 @@ describe('utils logic', () => {
       expect(isFallbackEligibleSddAgent('jd-judge-a')).toBe(true);
       expect(isFallbackEligibleSddAgent('sdd-orchestrator')).toBe(false);
       expect(isFallbackEligibleSddAgent('gentle-orchestrator')).toBe(false);
+      expect(isFallbackEligibleSddAgent('model-audit')).toBe(false);
       expect(isFallbackEligibleSddAgent('review-risk-fallback')).toBe(false);
       expect(isFallbackEligibleSddAgent('sdd-test-fallback')).toBe(false);
       expect(isFallbackEligibleSddAgent('other-test')).toBe(false);
+    });
+
+    it('isEditablePrimaryAgent accepts runtime custom primaries and rejects reserved/fallback names', () => {
+      expect(isEditablePrimaryAgent('security-scanner')).toBe(true);
+      expect(isEditablePrimaryAgent('model-audit')).toBe(true);
+      expect(isEditablePrimaryAgent('gentle-ai-windows-validator')).toBe(true);
+      expect(isEditablePrimaryAgent('tester-fallback')).toBe(false);
+      expect(isEditablePrimaryAgent('sdd-orchestrator')).toBe(false);
+      expect(isEditablePrimaryAgent('build')).toBe(false);
+    });
+
+    it('keeps catalog visibility, persistence, and runtime sync as separate boundaries', () => {
+      expect(isCatalogVisibleAgent('sdd-ORCHETATOR')).toBe(true);
+      expect(isPersistibleAgentKey('sdd-ORCHETATOR')).toBe(true);
+      expect(isPersistibleAgentKey('─────────────')).toBe(false);
+
+      expect(isRuntimeSyncEligibleAgent('sdd-apply')).toBe(true);
+      expect(isRuntimeSyncEligibleAgent('gentle-ai-windows-validator')).toBe(true);
+      expect(isRuntimeSyncEligibleAgent('sdd-ORCHETATOR')).toBe(false);
+      expect(isRuntimeSyncEligibleAgent('compaction')).toBe(false);
+      expect(isRuntimeSyncEligibleAgent('summary')).toBe(false);
+      expect(isRuntimeSyncEligibleAgent('title')).toBe(false);
     });
   });
 

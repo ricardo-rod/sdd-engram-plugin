@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "exactOptionalPropertyTypes": false,
+    "jsx": "react-jsx",
+    "jsxImportSource": "@opentui/solid",
+    "lib": ["ES2024", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "target": "ES2024",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "tsup.config.ts"]
+}

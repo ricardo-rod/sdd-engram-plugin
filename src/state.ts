@@ -25,10 +25,10 @@ export function setActiveProfile(profile: ActiveProfileState | null): void {
   setActiveProfileSignal(profile);
 }
 
-export function setShowModelBadge(value: boolean): void {
-  setShowModelBadgeSignal(value);
+export function setShowModelBadge(_value: boolean): void {
+  setShowModelBadgeSignal(true);
 }
 
-export function setBadgeDisplayMode(mode: BadgeDisplayMode): void {
-  setBadgeDisplayModeSignal(mode);
+export function setBadgeDisplayMode(_mode: BadgeDisplayMode): void {
+  setBadgeDisplayModeSignal("model");
 }

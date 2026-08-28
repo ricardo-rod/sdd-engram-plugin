@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "allowJs": true,
+    "checkJs": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "noEmit": true,
+    "moduleResolution": "node",
+    "lib": ["ES2022", "DOM"],
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true
+  },
+  "include": ["modules/**/*.js", "tests/**/*.mjs", "scripts/**/*.mjs"],
+  "exclude": ["node_modules", "project-tracking-dashboard"]
+}

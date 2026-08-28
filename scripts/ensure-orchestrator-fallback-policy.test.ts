@@ -144,5 +144,13 @@ describe('ensure-orchestrator-fallback-policy logic', () => {
 
       expect(resolveCanonicalPromptAgentName(config)).toBe('sdd-orchestrator');
     });
+
+    it('preserves the protected fallback policy literals and agent naming contract', () => {
+      expect(FALLBACK_POLICY_BLOCK).toContain('fallback');
+      expect(FALLBACK_POLICY_BLOCK).toContain('sdd-apply');
+      expect(FALLBACK_POLICY_BLOCK).toContain('sdd-apply-fallback');
+      expect(FALLBACK_POLICY_BLOCK).toContain('sdd-orchestrator');
+      expect(FALLBACK_POLICY_BLOCK).toContain('required phase contract fields');
+    });
   });
 });

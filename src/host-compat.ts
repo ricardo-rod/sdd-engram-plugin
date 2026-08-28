@@ -1,4 +1,5 @@
 import { createLogger } from "./logger";
+import type { DialogSize } from "./types";
 
 const log = createLogger("host-compat");
 
@@ -77,6 +78,14 @@ export async function safeHostAsyncAction<T>(
 	} catch (error) {
 		log.warn(`${label} failed; OpenCode will continue.`, error);
 		return fallback;
+	}
+}
+
+export function safeSetDialogSize(api: any, size: DialogSize): void {
+	try {
+		api?.ui?.dialog?.setSize?.(size);
+	} catch (error) {
+		log.warn(`safeSetDialogSize: failed to set dialog size to '${size}'`, error);
 	}
 }
 
