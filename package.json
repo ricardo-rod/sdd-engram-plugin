@@ -15,6 +15,7 @@
 	"main": "./dist/tui.js",
 	"exports": {
 		"./tui": {
+			"types": "./dist/tui.d.ts",
 			"import": "./dist/tui.js"
 		}
 	},
@@ -35,6 +36,7 @@
 		"semantic-release": "semantic-release"
 	},
 	"devDependencies": {
+		"@opencode/plugin": "^2.0.7",
 		"@semantic-release/changelog": "6.0.3",
 		"@semantic-release/commit-analyzer": "13.0.1",
 		"@semantic-release/git": "10.0.1",
@@ -58,14 +60,13 @@
 		"vite": "8.1.0"
 	},
 	"peerDependencies": {
-		"@opencode-ai/plugin": ">=1.17.11",
-		"@opentui/core": ">=0.4.2 <1",
-		"@opentui/keymap": ">=0.4.2 <1",
-		"@opentui/solid": ">=0.4.2 <1",
-		"solid-js": "1.9.12"
+		"@opencode/plugin": ">=2.0.0 <3",
+		"@opentui/core": ">=0.5.10 <1",
+		"@opentui/solid": ">=0.5.10 <1",
+		"solid-js": ">=1.9.0 <2"
 	},
 	"engines": {
-		"node": ">=24 <25",
-		"opencode": ">=1.17.11"
+		"node": ">=24",
+		"opencode": ">=2"
 	}
 }

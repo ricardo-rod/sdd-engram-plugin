@@ -109,6 +109,41 @@ You can also pin a specific version in `tui.json`:
 }
 ```
 
+### Native OpenCode V2
+
+OpenCode V2 ships a new plugin API (breaking change versus V1). This package
+is V2-native: the single `./tui` export serves OpenCode 2.x.
+
+- `./tui` → `dist/tui.js` — built from `index.tsx` via `Plugin.define`
+  (`sdd-model-select`) from `@opencode/plugin/tui`.
+
+Enable the plugin in `cli.json` (global CLI config at
+`~/.config/opencode/cli.json`, or `$XDG_CONFIG_HOME/opencode/cli.json` when
+`XDG_CONFIG_HOME` is set):
+
+```json
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "plugins": ["opencode-sdd-engram-manage"]
+}
+```
+
+V2 behavior notes:
+
+- Slots: `sidebar.content` and `home.footer.status` (equivalents of the V1
+  `sidebar_content` / `home_bottom` slots).
+- Storage: durable `context.storage.store("sdd-prefs", ...)` starts fresh —
+  V1 `kv` preferences are NOT migrated automatically.
+- Dialogs: promise-based `context.ui.dialog.select` / `confirm` / `prompt`
+  plus toasts. The full dialog port is still pending: stubs in `index.tsx`
+  carry `TODO(tui-v2)` markers pointing at their V1 source in `src/dialogs.tsx`.
+- Requires `node >= 24` and `opencode >= 2` (see `engines` in `package.json`).
+
+> Do NOT list the bare package name in both `cli.json` and the legacy
+> `tui.json`: each loader reconciles the same install independently, and the
+> duplicate declaration can surface double reconciliation failures. For V2,
+> declare the plugin in `cli.json` only.
+
 ---
 
 ## Usage
@@ -363,8 +398,8 @@ Uses `semantic-release` on pushes to `main`. See [docs/publish.md](docs/publish.
 
 - **Package:** `opencode-sdd-engram-manage`
 - **Current version:** see [CHANGELOG.md](CHANGELOG.md) or [npm](https://www.npmjs.com/package/opencode-sdd-engram-manage)
-- **Requires:** `opencode >= 1.3.13`, Engram server running on port 7437.
-- **Peer dependencies:** `@opencode-ai/plugin >= 1.14.29`, `@opentui/core >= 0.2.0 < 1`, `@opentui/solid >= 0.2.0 < 1`, `solid-js 1.9.12`
+- **Requires:** `opencode >= 2`, Engram server running on port 7437.
+- **Peer dependencies:** `@opencode/plugin >= 2.0.0 < 3`, `@opentui/core >= 0.5.10 < 1`, `@opentui/solid >= 0.5.10 < 1`, `solid-js >= 1.9.0 < 2`
 - **License:** [MIT](LICENSE)
 
 Developed by [j0k3r-dev-rgl](https://github.com/j0k3r-dev-rgl).
