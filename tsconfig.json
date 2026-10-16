@@ -2,6 +2,10 @@
 	"compilerOptions": {
 		"allowImportingTsExtensions": true,
 		"exactOptionalPropertyTypes": false,
+		// Silences TS5101 (`baseUrl` deprecated): tsup 8.5.1 injects
+		// `baseUrl: "."` into its DTS worker compilerOptions unconditionally,
+		// which TypeScript 6 reports as a hard error. No `baseUrl` is set here.
+		"ignoreDeprecations": "6.0",
 		"jsx": "react-jsx",
 		"jsxImportSource": "@opentui/solid",
 		"lib": ["ES2024", "DOM"],
